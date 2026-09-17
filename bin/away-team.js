@@ -113,11 +113,14 @@ if (flag('--build')) {
   process.exit(0);
 }
 
-// A platform counts as installed when its CLI is on PATH or its app has created its config folder.
+// A platform counts as installed when its CLI is on PATH or its app has left files behind.
+// Only files the apps themselves create count; our own agents/ and skills/ folders must not, or a previous install fakes a detection.
+const home = (...p) => path.join(os.homedir(), ...p);
+const anyExists = (...paths) => paths.some((p) => fs.existsSync(p));
 async function pickTarget() {
   const found = {
-    copilot: has('copilot') || fs.existsSync(path.join(os.homedir(), '.copilot')),
-    claude: has('claude') || fs.existsSync(path.join(os.homedir(), '.claude')),
+    copilot: has('copilot') || anyExists(home('.copilot', 'config.json'), home('.copilot', 'session-state'), home('.copilot', 'logs')),
+    claude: has('claude') || anyExists(home('.claude.json'), home('.claude', 'projects'), home('.claude', 'sessions'), home('.claude', 'settings.json')),
   };
   const dflt = found.copilot && found.claude ? 'all' : found.copilot ? 'copilot' : found.claude ? 'claude' : 'all';
   console.log(`Detected: Copilot ${found.copilot ? 'yes' : 'no'}, Claude Code ${found.claude ? 'yes' : 'no'}`);
@@ -131,19 +134,20 @@ async function pickTarget() {
 
 (async () => {
   const BANNER = `
-   █████╗  ██╗    ██╗  █████╗  ██╗   ██╗
-  ██╔══██╗ ██║    ██║ ██╔══██╗ ╚██╗ ██╔╝
-  ███████║ ██║ █╗ ██║ ███████║  ╚████╔╝
-  ██╔══██║ ██║███╗██║ ██╔══██║   ╚██╔╝
-  ██║  ██║ ╚███╔███╔╝ ██║  ██║    ██║
-  ╚═╝  ╚═╝  ╚══╝╚══╝  ╚═╝  ╚═╝    ╚═╝
-  ████████╗ ███████╗  █████╗  ███╗   ███╗
-  ╚══██╔══╝ ██╔════╝ ██╔══██╗ ████╗ ████║
-     ██║    █████╗   ███████║ ██╔████╔██║
-     ██║    ██╔══╝   ██╔══██║ ██║╚██╔╝██║
-     ██║    ██║      ██║  ██║ ██║ ╚═╝ ██║
-     ╚═╝    ╚══════╝ ╚═╝  ╚═╝ ╚═╝     ╚═╝
-  `;
+ █████╗  ██╗    ██╗  █████╗  ██╗   ██╗
+██╔══██╗ ██║    ██║ ██╔══██╗ ╚██╗ ██╔╝
+███████║ ██║ █╗ ██║ ███████║  ╚████╔╝
+██╔══██║ ██║███╗██║ ██╔══██║   ╚██╔╝
+██║  ██║ ╚███╔███╔╝ ██║  ██║    ██║
+╚═╝  ╚═╝  ╚══╝╚══╝  ╚═╝  ╚═╝    ╚═╝
+
+████████╗ ███████╗  █████╗  ███╗   ███╗
+╚══██╔══╝ ██╔════╝ ██╔══██╗ ████╗ ████║
+   ██║    █████╗   ███████║ ██╔████╔██║
+   ██║    ██╔══╝   ██╔══██║ ██║╚██╔╝██║
+   ██║    ██║      ██║  ██║ ██║ ╚═╝ ██║
+   ╚═╝    ╚══════╝ ╚═╝  ╚═╝ ╚═╝     ╚═╝
+`;
   console.log(BANNER + `  away-team v${pkg.version} · beaming down the crew\n`);
   if (!target) target = await pickTarget();
 
