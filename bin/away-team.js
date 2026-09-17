@@ -85,6 +85,9 @@ function emit(platform, dest) {
 
 // Runs a command; a non-zero exit whose output matches ALREADY (marketplace or plugin already present) is fine.
 const ALREADY = /already (registered|installed|exists|added)/i;
+// True when a CLI is on PATH. The Claude and Copilot desktop apps read ~/.claude and ~/.copilot without exposing a CLI.
+const has = (cli) => spawnSync(`${cli} --version`, { shell: true, stdio: 'ignore' }).status === 0;
+
 function sh(cmd) {
   console.log('> ' + cmd);
   const r = spawnSync(cmd, { encoding: 'utf8', shell: true });
@@ -130,7 +133,10 @@ console.log(BANNER + `  away-team v${pkg.version} · beaming down the crew
 if (['copilot', 'all'].includes(target)) {
   emit('copilot', path.join(os.homedir(), '.copilot'));
   console.log('Copilot: installed to ~/.copilot');
-  if (!flag('--skip-plugins')) {
+  if (!flag('--skip-plugins') && !has('copilot')) {
+    console.log(['copilot CLI not on PATH; install the plugins from inside a Copilot session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  then: npx skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'].join('\n'));
+    setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
+  } else if (!flag('--skip-plugins')) {
     sh('copilot plugin marketplace add DietrichGebert/ponytail');
     sh('copilot plugin install ponytail@ponytail');
     sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'); // core skill only; the other 19 are extras
@@ -140,7 +146,9 @@ if (['copilot', 'all'].includes(target)) {
 if (['claude', 'all'].includes(target)) {
   emit('claude', path.join(os.homedir(), '.claude'));
   console.log('Claude Code: installed to ~/.claude');
-  if (!flag('--skip-plugins')) {
+  if (!flag('--skip-plugins') && !has('claude')) {
+    console.log(['claude CLI not on PATH; install the plugins from inside a Claude Code session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  /plugin marketplace add JuliusBrussee/caveman', '  /plugin install caveman@caveman'].join('\n'));
+  } else if (!flag('--skip-plugins')) {
     sh('claude plugin marketplace add DietrichGebert/ponytail');
     sh('claude plugin install ponytail@ponytail');
     sh('claude plugin marketplace add JuliusBrussee/caveman');
