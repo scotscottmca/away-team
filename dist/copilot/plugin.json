@@ -1,6 +1,6 @@
 {
   "name": "away-team",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Bug-fixing agent crew for GitHub Copilot and Claude Code: an orchestrator that dispatches mapper, investigator, basher and pr-writer.",
   "author": {
     "name": "scotscottmca",
