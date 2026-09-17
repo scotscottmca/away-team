@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-tags: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -29,6 +27,7 @@ jobs:
       - name: Bump version if this one is already tagged
         # Tags are the source of truth: the registry's read cache can lag a publish by minutes.
         run: |
+          git fetch --tags --force --quiet origin
           local=$(node -p 'require("./package.json").version')
           if git rev-parse -q --verify "refs/tags/v$local" >/dev/null; then
             git config user.name "github-actions[bot]"
