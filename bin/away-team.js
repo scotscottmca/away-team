@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // away-team installer.
-//   npx away-team [--target copilot|claude|all] [--skip-plugins] [--level lite|full|ultra]
+//   npx @scotscottmca/away-team [--target copilot|claude|all] [--skip-plugins] [--level lite|full|ultra]
 //                                                                  install user-level (~/.copilot, ~/.claude); level sets the
 //                                                                  ponytail + caveman default (ultra); /ponytail or /caveman <level> per session
 //   node bin/away-team.js --build                                  render dist/copilot and dist/claude for the plugin marketplaces
@@ -93,7 +93,7 @@ if (flag('--build')) {
   const dist = path.join(ROOT, 'dist');
   fs.rmSync(dist, { recursive: true, force: true });
   const meta = {
-    name: pkg.name, version: pkg.version, description: pkg.description, author: pkg.author,
+    name: pkg.name.split("/").pop(), version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
   emit('copilot', path.join(dist, 'copilot'));
