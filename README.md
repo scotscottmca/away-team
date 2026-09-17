@@ -128,7 +128,7 @@ Edit `agents/` and `skills/` only; `dist/` is generated on release.
 
 ## Release
 
-Every push to `main` is a release. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm, so docs, agents, `dist/` and the npm package always match. Pull after each push to pick up the version commit.
+A push to `main` that touches `agents/`, `skills/`, `bin/` or `package.json` is a release. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm. Doc-only pushes (README, `docs/`, LICENSE, workflow) do not release; the README ships with the next code release. Pull after a releasing push to pick up the version commit.
 
 For a minor or major bump, run `npm version minor` (or `major`) locally and push; the workflow sees that version is not on npm yet and publishes it as is.
 

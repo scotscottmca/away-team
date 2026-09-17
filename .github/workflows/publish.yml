@@ -1,9 +1,15 @@
-# Every push to main is a release: bump patch (unless the version is already unpublished), rebuild dist, tag, publish.
+# A push to main that changes shipped code is a release: bump patch (unless the version is already unpublished),
+# rebuild dist, tag, publish. Docs, workflow and licence changes do not release.
 # Auth: NPM_TOKEN repo secret (granular token, publish scope, bypass 2FA), or npm trusted publishing via OIDC if configured.
 name: publish
 on:
   push:
     branches: [main]
+    paths:
+      - 'agents/**'
+      - 'skills/**'
+      - 'bin/**'
+      - 'package.json'
 permissions:
   contents: write
   id-token: write
