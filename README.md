@@ -12,22 +12,31 @@ agents/
 skills/
   codemap/SKILL.md        CODEMAP.md template + rules
   pr-format/SKILL.md      PR template + gh commands
-install.ps1 / install.sh  renders per platform, installs ponytail + caveman
+bin/away-team.js          installer; also renders dist/ for the plugin marketplaces
+dist/copilot, dist/claude prebuilt plugins (generated, committed)
 ```
 
 ## Install
 
-```powershell
-.\install.ps1                  # Copilot + Claude Code + ponytail + caveman
-.\install.ps1 -Target claude   # copilot | claude | all
-.\install.ps1 -SkipPlugins
-```
+**npx** (Windows, Mac, Linux; installs ponytail and caveman too):
 
 ```bash
-./install.sh                   # or: ./install.sh claude --skip-plugins
+npx away-team                          # Copilot + Claude Code
+npx away-team --target claude          # copilot | claude | all
+npx away-team --skip-plugins
+npx github:scotscottmca/away-team      # same, straight from GitHub
 ```
 
-What lands where:
+**Plugin marketplaces** (agents and skills only; ponytail and caveman are separate, see below):
+
+```bash
+copilot plugin marketplace add scotscottmca/away-team && copilot plugin install away-team@away-team
+claude plugin marketplace add scotscottmca/away-team && claude plugin install away-team@away-team
+```
+
+**Per repo**: copy `dist/copilot/agents` into the project's `.github/agents/` (Copilot) or `dist/claude/agents` into `.claude/agents/` (Claude Code).
+
+What the npx install writes:
 
 | | Copilot | Claude Code |
 |---|---|---|
@@ -63,7 +72,7 @@ Ponytail levels: `/ponytail lite|full|ultra` (Copilot namespaces it `/ponytail:p
 
 ## Model tiers
 
-Agent files carry a tier, not a model. The installer resolves it per platform, so each platform gets the best model available to it for that job. Edit the table at the top of the installer to change the mapping.
+Agent files carry a tier, not a model. The installer resolves it per platform, so each platform gets the best model available to it for that job. Edit `MODELS` at the top of `bin/away-team.js` to change the mapping, then `npm run build` to refresh `dist/`.
 
 | Agent | Tier | Copilot | Claude Code | Why |
 |---|---|---|---|---|
@@ -80,7 +89,7 @@ Copilot per 1M tokens, input / output: Luna 0.20 / 1.20, Sonnet 5 2 / 10, Opus 5
 ## Caveats
 
 1. **Copilot CLI may downgrade a subagent's model to the session model** when the subagent's is pricier ([copilot-cli#2758](https://github.com/github/copilot-cli/issues/2758)). So the investigator only gets Opus 5 if the session is on Opus 5. Run sessions on Sonnet 5 and `/model` up to Opus 5 for a hard triage. Cheaper subagent models (Luna) are never downgraded. Claude Code has no such downgrade.
-2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs (`claude-sonnet-5`, `gpt-5.6-luna`). Run `/model` once to see the spelling your CLI accepts and fix the installer table if it differs.
+2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs (`claude-sonnet-5`, `gpt-5.6-luna`). Run `/model` once to see the spelling your CLI accepts and fix `MODELS` in `bin/away-team.js` if it differs.
 3. Copilot's auto model selection gives 10% off but ignores per-agent models; not used here.
 
 ## Why it is built this way
@@ -89,7 +98,17 @@ Copilot per 1M tokens, input / output: Luna 0.20 / 1.20, Sonnet 5 2 / 10, Opus 5
 - **Investigator never edits.** Read-only tools make "diagnose, don't patch the symptom" a hard constraint. Three falsified hypotheses is the stop rule (superpowers `systematic-debugging`).
 - **CODEMAP.md is the memory.** Persistent, committed, refreshed by diff against its own `commit:` header. Names not links, invariants not file lists (matklad's ARCHITECTURE.md guidance). Basher updates it when a fix moves a boundary.
 - **PR body is the TL;DR.** Line-level reasoning goes in one review via the REST API (`gh pr comment` cannot do inline), narrative in one top-level comment.
-- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ, and the installer rewrites those two lines. No hooks, no plugin manifest. Add `plugin.json` + `marketplace.json` when you want `plugin install` across machines.
+- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ. The installer rewrites those two lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.
+
+## Release
+
+```bash
+npm version patch        # bump; prepublishOnly rebuilds dist on publish
+npm publish
+git add dist && git commit -m "chore: rebuild dist" && git push --follow-tags
+```
+
+`dist/` is committed so the marketplaces serve prebuilt plugins. After changing agents or skills, run `npm run build` and commit the result.
 
 ## Sources
 

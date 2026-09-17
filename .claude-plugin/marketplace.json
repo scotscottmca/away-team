@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "away-team",
+  "description": "Bug-fixing agent crew: orchestrator, mapper, investigator, basher, pr-writer.",
+  "owner": { "name": "scotscottmca", "url": "https://github.com/scotscottmca" },
+  "plugins": [
+    {
+      "name": "away-team",
+      "description": "An orchestrator that dispatches a crew of specialists: map the codebase, root-cause the bug, bash it, open the PR.",
+      "source": "./dist/claude",
+      "category": "productivity"
+    }
+  ]
+}

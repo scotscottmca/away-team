@@ -1,0 +1,22 @@
+{
+  "name": "away-team",
+  "version": "0.1.0",
+  "description": "Bug-fixing agent crew for GitHub Copilot and Claude Code: an orchestrator that dispatches mapper, investigator, basher and pr-writer.",
+  "author": {
+    "name": "scotscottmca",
+    "url": "https://github.com/scotscottmca"
+  },
+  "homepage": "https://github.com/scotscottmca/away-team",
+  "repository": "https://github.com/scotscottmca/away-team",
+  "license": "MIT",
+  "keywords": [
+    "copilot",
+    "claude-code",
+    "agents",
+    "subagents",
+    "debugging",
+    "root-cause",
+    "pull-request",
+    "skills"
+  ]
+}

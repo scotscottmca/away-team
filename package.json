@@ -1,0 +1,17 @@
+{
+  "name": "away-team",
+  "version": "0.1.0",
+  "description": "Bug-fixing agent crew for GitHub Copilot and Claude Code: an orchestrator that dispatches mapper, investigator, basher and pr-writer.",
+  "bin": { "away-team": "bin/away-team.js" },
+  "files": ["bin", "agents", "skills", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "node bin/away-team.js --build",
+    "prepublishOnly": "npm run build"
+  },
+  "author": { "name": "scotscottmca", "url": "https://github.com/scotscottmca" },
+  "homepage": "https://github.com/scotscottmca/away-team",
+  "repository": "https://github.com/scotscottmca/away-team",
+  "license": "MIT",
+  "keywords": ["copilot", "claude-code", "agents", "subagents", "debugging", "root-cause", "pull-request", "skills"],
+  "engines": { "node": ">=18" }
+}
