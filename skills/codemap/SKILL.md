@@ -47,7 +47,7 @@ Tables or collections that matter, migrations location, external APIs and their 
 Where the sources of truth between layers live: OpenAPI specs, schemas, shared interfaces, module manifests, generated clients and what generates them. These are the seams a task can be cut along.
 
 ## Invariants and conventions
-Things that must stay true, especially absences. "Only `Infrastructure/` talks to SQL." "Money is `decimal`, never `double`." Error handling, logging, DI, config, feature-flag conventions.
+Things that must stay true, especially absences, each with its reason and the commit that set it. "Only `Infrastructure/` talks to SQL (connection pooling lives there; a1b2c3d)." "Money is `decimal`, never `double`." Error handling, logging, DI, config, feature-flag conventions.
 
 ## Hot spots
 Files with many importers, historically buggy areas, known debt.
