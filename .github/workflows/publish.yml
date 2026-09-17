@@ -10,6 +10,7 @@ on:
       - 'skills/**'
       - 'bin/**'
       - 'package.json'
+  workflow_dispatch:
 permissions:
   contents: write
   id-token: write
@@ -19,22 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: Bump version if this one is already on npm
+      - name: Bump version if this one is already tagged
+        # Tags are the source of truth: the registry's read cache can lag a publish by minutes.
         run: |
-          name=$(node -p 'require("./package.json").name')
           local=$(node -p 'require("./package.json").version')
-          published=$(npm view "$name" version 2>/dev/null || echo none)
-          if [ "$local" = "$published" ]; then
+          if git rev-parse -q --verify "refs/tags/v$local" >/dev/null; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             npm version patch -m "v%s [skip ci]"
             git push --follow-tags
           else
-            echo "package.json is already at unpublished $local; publishing as is"
+            echo "v$local is not tagged yet; publishing as is"
             npm run build
           fi
       - run: npm publish --access public
