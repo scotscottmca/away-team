@@ -1,4 +1,4 @@
-# copilot-orchestrator
+# pitcrew
 
 Five agents and two skills for bug work, installed user-level so they apply to every repo and every language. One source, two targets: GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app).
 
