@@ -14,11 +14,11 @@ The point is spending fewer tokens on bug work without losing quality. Five thin
 
 ```
 agents/
-  away-team.agent.md      pick this one; it routes to the others
-  mapper.agent.md         writes docs/CODEMAP.md
-  investigator.agent.md   read-only root cause → Diagnosis
-  basher.agent.md         Diagnosis → failing test → minimal fix → commit
-  pr-writer.agent.md      branch → PR (TL;DR body, breakdown in comments)
+  away-team.agent.md                pick this one; it routes to the others
+  away-team-mapper.agent.md         writes docs/CODEMAP.md
+  away-team-investigator.agent.md   read-only root cause → Diagnosis
+  away-team-basher.agent.md         Diagnosis → failing test → minimal fix → commit
+  away-team-pr-writer.agent.md      branch → PR (TL;DR body, breakdown in comments)
 skills/
   codemap/SKILL.md        CODEMAP.md template + rules
   pr-format/SKILL.md      PR template + gh commands
@@ -70,7 +70,7 @@ What the npx install writes:
 | Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
 | Claude desktop app (no agent picker) | `/away-team <your request>` |
 
-In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator adds the routing rules and gates.
+Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator adds the routing rules and gates.
 
 ## Use
 

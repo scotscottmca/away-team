@@ -29,10 +29,10 @@ Every agent is a markdown file with a small frontmatter block: its tools, its mo
 | Piece | Role |
 |---|---|
 | away-team | The orchestrator. Classifies the request, dispatches one specialist per step, gates risky fixes and pushes |
-| mapper | Trawls the solution and writes `docs/CODEMAP.md`: entry points, modules, data flow, contracts, invariants, verified build and test commands |
-| investigator | Read-only. Reproduces, localises via git blame, verifies one hypothesis at a time, returns a Diagnosis with file and line evidence |
-| basher | Takes a Diagnosis, writes the regression test, applies the minimal root-cause fix, runs the suite, commits |
-| pr-writer | Turns the branch into a PR: conventional-commit title, TL;DR body, inline review comments via the GitHub API |
+| away-team-mapper | Trawls the solution and writes `docs/CODEMAP.md`: entry points, modules, data flow, contracts, invariants, verified build and test commands |
+| away-team-investigator | Read-only. Reproduces, localises via git blame, verifies one hypothesis at a time, returns a Diagnosis with file and line evidence |
+| away-team-basher | Takes a Diagnosis, writes the regression test, applies the minimal root-cause fix, runs the suite, commits |
+| away-team-pr-writer | Turns the branch into a PR: conventional-commit title, TL;DR body, inline review comments via the GitHub API |
 | codemap skill | The template and rules for the code map |
 | pr-format skill | The house PR format and the `gh` commands that post it |
 | installer | Renders the agents per platform and installs the companion plugins |
