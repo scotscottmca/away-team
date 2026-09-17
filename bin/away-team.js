@@ -85,13 +85,18 @@ function setInstructionLine(file, level) {
   fs.writeFileSync(file, cur);
 }
 
-// True when a CLI is on PATH. The desktop apps read ~/.claude and ~/.copilot without exposing a CLI.
-const has = (cli) => spawnSync(`${cli} --version`, { shell: true, stdio: 'ignore' }).status === 0;
+// True when a real CLI is on PATH. Resolved with where/command -v rather than executed: the Claude and Copilot
+// desktop apps from the Microsoft Store register execution aliases under WindowsApps, and running one opens the app.
+function has(cli) {
+  const r = spawnSync(process.platform === 'win32' ? `where ${cli}` : `command -v ${cli}`, { shell: true, encoding: 'utf8' });
+  const hits = (r.stdout || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/WindowsApps/i.test(l));
+  return r.status === 0 && hits.length > 0;
+}
 // Only files the apps themselves create count; our own agents/ and skills/ must not, or a previous install fakes a detection.
 const anyExists = (...paths) => paths.some((p) => fs.existsSync(p));
 const detect = () => ({
   copilot: has('copilot') || anyExists(home('.copilot', 'config.json'), home('.copilot', 'session-state'), home('.copilot', 'logs')),
-  claude: has('claude') || anyExists(home('.claude.json'), home('.claude', 'projects'), home('.claude', 'sessions'), home('.claude', 'settings.json')),
+  claude: has('claude') || anyExists(home('.claude', 'projects'), home('.claude', 'sessions'), home('.claude', 'statsig'), home('.claude', 'settings.json')), // not ~/.claude.json alone: a stale one survives an uninstall
 });
 
 // Runs a command, capturing output. "already" = the marketplace or plugin was present, which is fine.
