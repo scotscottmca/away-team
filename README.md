@@ -1,6 +1,14 @@
 # away-team
 
-Five agents and two skills for bug work: an orchestrator that beams down a crew of specialists (mapper, investigator, basher, pr-writer) on each mission. Installed user-level so they apply to every repo and every language. One source, two targets: GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app).
+An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
+
+The point is spending fewer tokens on bug work without losing quality. Five things do that:
+
+1. **Right model per job.** Each agent declares a tier (cheap, balanced, strong) rather than a model. Reading a repo is cheap-tier work; root-causing is the one place the strong tier pays for itself.
+2. **Narrow, read-only specialists.** The investigator cannot edit and the orchestrator cannot run code, so each context window holds only what that job needs.
+3. **Summaries, not transcripts.** Every handoff is a fixed report (Diagnosis, Fix report). Nothing is re-verified downstream.
+4. **A persistent code map.** `docs/CODEMAP.md` is written once and refreshed by diff, so agents stop re-reading the repo every session.
+5. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
 
 ```
 agents/
@@ -54,7 +62,7 @@ What the npx install writes:
 | Claude Code, any project, always | `"agent": "orchestrator"` in that project's `.claude/settings.json` |
 | Claude desktop app (no agent picker) | `/orchestrator <your request>` |
 
-In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator just adds the routing rules and gates.
+In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator adds the routing rules and gates.
 
 ## Use
 
@@ -72,25 +80,33 @@ Ponytail levels: `/ponytail lite|full|ultra` (Copilot namespaces it `/ponytail:p
 
 ## Model tiers
 
-Agent files carry a tier, not a model. The installer resolves it per platform, so each platform gets the best model available to it for that job. Edit `MODELS` at the top of `bin/away-team.js` to change the mapping, then `npm run build` to refresh `dist/`.
+Agents carry a tier, not a model. The installer resolves the tier per platform, so each platform uses the best model it has for that job. The mapping is the `MODELS` table at the top of `bin/away-team.js`; edit it for your plan, then `npm run build` to refresh `dist/`.
 
-| Agent | Tier | Copilot | Claude Code | Why |
-|---|---|---|---|---|
-| mapper | cheap | GPT-5.6 Luna | haiku | reads the most, reasons the least |
-| orchestrator | balanced | Claude Sonnet 5 | sonnet | classifies and relays; needs judgement on gates |
-| basher | balanced | Claude Sonnet 5 | sonnet | strong coder at half the price of the top tier |
-| pr-writer | balanced | Claude Sonnet 5 | sonnet | short pass, writing quality matters |
-| investigator | strong | Claude Opus 5 | opus | root cause is where reasoning quality pays; read-only so output stays small |
+| Agent | Tier | Why |
+|---|---|---|
+| mapper | cheap | reads the most, reasons the least; long inputs, so input price dominates |
+| orchestrator | balanced | classifies and relays; small context, but the gates need judgement |
+| basher | balanced | a strong coder at a fraction of the top tier; the Diagnosis already did the thinking |
+| pr-writer | balanced | short pass; writing quality matters more than reasoning |
+| investigator | strong | root cause is where reasoning quality pays, and read-only tools keep its output small |
 
-Claude Code aliases (`haiku`, `sonnet`, `opus`) resolve to the newest model of that tier automatically. If your plan has Fable, set `strong = 'fable'` in the installer for the investigator.
+Defaults shipped:
 
-Copilot per 1M tokens, input / output: Luna 0.20 / 1.20, Sonnet 5 2 / 10, Opus 5 5 / 25. Skipped: GPT-5.5 (5 / 30, most expensive, no advantage here), Opus 4.7 / 4.8 (same price as Opus 5, older), GPT-5.6 Sol / Terra, GPT-5.4 (mid-price, no niche). GPT-5.3-Codex (1.75 / 14) is a cheaper `balanced` for basher if cost bites.
+| Tier | Copilot | Claude Code |
+|---|---|---|
+| cheap | `gpt-5.6-luna` | `haiku` |
+| balanced | `claude-sonnet-5` | `sonnet` |
+| strong | `claude-opus-5` | `opus` |
+
+How the defaults were chosen: for each tier, the cheapest model on Copilot's per-token price list that is good at the tier's job. A model priced like a tier's default but older, or priced between two tiers with no distinct strength, adds nothing and is left out. Claude Code aliases resolve to the newest model of each tier automatically; if your plan exposes a stronger alias (for example `fable`), set it as `strong`.
+
+Cheaper choices when cost bites: a code-specialised mid-price model for `balanced` on basher, and the cheap tier for pr-writer.
 
 ## Caveats
 
-1. **Copilot CLI may downgrade a subagent's model to the session model** when the subagent's is pricier ([copilot-cli#2758](https://github.com/github/copilot-cli/issues/2758)). So the investigator only gets Opus 5 if the session is on Opus 5. Run sessions on Sonnet 5 and `/model` up to Opus 5 for a hard triage. Cheaper subagent models (Luna) are never downgraded. Claude Code has no such downgrade.
-2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs (`claude-sonnet-5`, `gpt-5.6-luna`). Run `/model` once to see the spelling your CLI accepts and fix `MODELS` in `bin/away-team.js` if it differs.
-3. Copilot's auto model selection gives 10% off but ignores per-agent models; not used here.
+1. **Copilot CLI may downgrade a subagent's model to the session model** when the subagent's is pricier ([copilot-cli#2758](https://github.com/github/copilot-cli/issues/2758)). So the investigator only gets the strong tier if the session is on it. Run sessions on the balanced tier and `/model` up for a hard triage. Cheaper subagent models are never downgraded. Claude Code has no such downgrade.
+2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs. Run `/model` once to see the spelling your CLI accepts and fix `MODELS` in `bin/away-team.js` if it differs.
+3. Copilot's auto model selection gives a discount but ignores per-agent models; not used here.
 
 ## Why it is built this way
 
@@ -99,6 +115,10 @@ Copilot per 1M tokens, input / output: Luna 0.20 / 1.20, Sonnet 5 2 / 10, Opus 5
 - **CODEMAP.md is the memory.** Persistent, committed, refreshed by diff against its own `commit:` header. Names not links, invariants not file lists (matklad's ARCHITECTURE.md guidance). Basher updates it when a fix moves a boundary.
 - **PR body is the TL;DR.** Line-level reasoning goes in one review via the REST API (`gh pr comment` cannot do inline), narrative in one top-level comment.
 - **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ. The installer rewrites those two lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.
+
+## Contributing
+
+Edit `agents/` and `skills/` only; `dist/` is generated. Run `npm run build` and commit the result with your change.
 
 ## Release
 
