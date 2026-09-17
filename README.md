@@ -41,8 +41,11 @@ npx github:scotscottmca/away-team                    # same, straight from GitHu
 **Plugin marketplaces** (agents and skills only; ponytail and caveman are separate, see below):
 
 ```bash
-copilot plugin marketplace add scotscottmca/away-team && copilot plugin install away-team@away-team
-claude plugin marketplace add scotscottmca/away-team && claude plugin install away-team@away-team
+copilot plugin marketplace add scotscottmca/away-team
+copilot plugin install away-team@away-team
+
+claude plugin marketplace add scotscottmca/away-team
+claude plugin install away-team@away-team
 ```
 
 **Per repo**: copy `dist/copilot/agents` into the project's `.github/agents/` (Copilot) or `dist/claude/agents` into `.claude/agents/` (Claude Code).
