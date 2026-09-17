@@ -17,7 +17,7 @@ A `## Diagnosis` block, or a fully-specified small task. If neither root cause n
 2. On `main` / `master`? Create `fix/<short-slug>` first.
 3. Write the regression test first. Run it. Confirm it fails for the stated reason.
 4. Make the smallest change that fixes the cause at the shared point, not at each caller. No refactors, no drive-by cleanups, no new abstractions, no new dependencies. Reuse what the repo already has.
-   Given a seam handoff instead of a whole Diagnosis: touch only that seam's files and honour its contract. If the fix needs the contract to change, stop and report; the contract is its own seam and goes first.
+   If the fix needs a contract (API, schema, interface) to change, change the contract first in its own commit, then the sides that depend on it.
 5. Run the regression test, then the affected project's tests. Shared code changed → full suite. Report every failure, including pre-existing ones.
 6. Fix moved a module boundary, entry point or invariant → update that section of `docs/CODEMAP.md`, with the one-sentence reason and the commit, so the next investigator does not relitigate it.
 7. Commit with a conventional-commit message (`fix(scope): ...`). Do not push. Do not open a PR.

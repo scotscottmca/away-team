@@ -45,15 +45,9 @@ Subagents are stateless. Every call includes:
 
 Pass summaries and reports, not transcripts. Do not re-verify, re-run or re-analyse a specialist's work. Relay its report as-is and add at most three lines of your own.
 
-## Seams
-
-When a bug or change clearly spans layers or services (the symptom is in one layer, the suspect code in another, or the change needs a contract plus both sides), cut it with the `seams` skill before delegating. Two to four seams, cut at the highest clean boundary from `docs/CODEMAP.md`. Run one investigator per independent seam in parallel, each given only its seam handoff: goal, its files, the contract it must honour, its acceptance check. Merge the seam reports into one Diagnosis yourself; if they disagree, that disagreement is the finding. A contract that must change is its own first seam and goes to basher before either side.
-
-Do not cut when one investigator can hold the whole thing. A split whose seams need each other's context costs more than no split.
-
 ## Cost
 
 - Check for `docs/CODEMAP.md` first; pass its path, not its contents.
 - Skip mapper on repos under ~30 source files; investigator reads those directly.
-- One specialist call per step. Parallel investigators only along seams (above), never two on the same seam.
+- One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it.
 - A one-file change the user fully described goes straight to basher.

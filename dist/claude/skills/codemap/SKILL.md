@@ -44,7 +44,7 @@ One representative request per entry point, traced layer to layer to store.
 Tables or collections that matter, migrations location, external APIs and their client classes.
 
 ## Contracts
-Where the sources of truth between layers live: OpenAPI specs, schemas, shared interfaces, module manifests, generated clients and what generates them. These are the seams a task can be cut along.
+Where the sources of truth between layers live: OpenAPI specs, schemas, shared interfaces, module manifests, generated clients and what generates them.
 
 ## Invariants and conventions
 Things that must stay true, especially absences, each with its reason and the commit that set it. "Only `Infrastructure/` talks to SQL (connection pooling lives there; a1b2c3d)." "Money is `decimal`, never `double`." Error handling, logging, DI, config, feature-flag conventions.
