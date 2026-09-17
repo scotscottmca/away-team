@@ -57,7 +57,7 @@ What the npx install writes:
 | agents | `~/.copilot/agents/*.agent.md` | `~/.claude/agents/*.md` |
 | skills | `~/.copilot/skills/` | `~/.claude/skills/` (plus `orchestrator` as a skill) |
 | ponytail | `copilot plugin install ponytail@ponytail` | `claude plugin install ponytail@ponytail` |
-| caveman | `npx skills add JuliusBrussee/caveman -g -a github-copilot` (no Copilot marketplace manifest) | `claude plugin install caveman@caveman` |
+| caveman | `npx skills add JuliusBrussee/caveman -s caveman` (core skill only; caveman has no Copilot marketplace manifest) | `claude plugin install caveman@caveman` |
 
 ## Select the orchestrator
 

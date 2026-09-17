@@ -83,9 +83,14 @@ function emit(platform, dest) {
   }
 }
 
+// Runs a command; a non-zero exit whose output matches ALREADY (marketplace or plugin already present) is fine.
+const ALREADY = /already (registered|installed|exists|added)/i;
 function sh(cmd) {
   console.log('> ' + cmd);
-  const r = spawnSync(cmd, { stdio: 'inherit', shell: true });
+  const r = spawnSync(cmd, { encoding: 'utf8', shell: true });
+  const out = (r.stdout || '') + (r.stderr || '');
+  if (r.status && ALREADY.test(out)) { console.log('  already present, skipping'); return; }
+  process.stdout.write(out);
   if (r.status) console.warn(`  exit ${r.status}, continuing`);
 }
 
@@ -111,7 +116,7 @@ if (['copilot', 'all'].includes(target)) {
   if (!flag('--skip-plugins')) {
     sh('copilot plugin marketplace add DietrichGebert/ponytail');
     sh('copilot plugin install ponytail@ponytail');
-    sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot');
+    sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'); // core skill only; the other 19 are extras
     setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
   }
 }
