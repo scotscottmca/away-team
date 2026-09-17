@@ -1,6 +1,6 @@
-# pitcrew
+# away-team
 
-Five agents and two skills for bug work, installed user-level so they apply to every repo and every language. One source, two targets: GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app).
+Five agents and two skills for bug work: an orchestrator that beams down a crew of specialists (mapper, investigator, basher, pr-writer) on each mission. Installed user-level so they apply to every repo and every language. One source, two targets: GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app).
 
 ```
 agents/
