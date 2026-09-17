@@ -21,7 +21,7 @@ const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execu
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
-const target = opt('--target', 'all');
+let target = opt('--target', null); // null: detect installed platforms and ask
 const level = opt('--level', 'ultra');
 
 // ponytail and caveman both read defaultMode from $XDG_CONFIG_HOME/<name>/config.json,
@@ -113,49 +113,68 @@ if (flag('--build')) {
   process.exit(0);
 }
 
-const BANNER = `
- █████╗  ██╗    ██╗  █████╗  ██╗   ██╗
-██╔══██╗ ██║    ██║ ██╔══██╗ ╚██╗ ██╔╝
-███████║ ██║ █╗ ██║ ███████║  ╚████╔╝
-██╔══██║ ██║███╗██║ ██╔══██║   ╚██╔╝
-██║  ██║ ╚███╔███╔╝ ██║  ██║    ██║
-╚═╝  ╚═╝  ╚══╝╚══╝  ╚═╝  ╚═╝    ╚═╝
-████████╗ ███████╗  █████╗  ███╗   ███╗
-╚══██╔══╝ ██╔════╝ ██╔══██╗ ████╗ ████║
-   ██║    █████╗   ███████║ ██╔████╔██║
-   ██║    ██╔══╝   ██╔══██║ ██║╚██╔╝██║
-   ██║    ██║      ██║  ██║ ██║ ╚═╝ ██║
-   ╚═╝    ╚══════╝ ╚═╝  ╚═╝ ╚═╝     ╚═╝
-`;
-console.log(BANNER + `  away-team v${pkg.version} · beaming down the crew
-`);
+// A platform counts as installed when its CLI is on PATH or its app has created its config folder.
+async function pickTarget() {
+  const found = {
+    copilot: has('copilot') || fs.existsSync(path.join(os.homedir(), '.copilot')),
+    claude: has('claude') || fs.existsSync(path.join(os.homedir(), '.claude')),
+  };
+  const dflt = found.copilot && found.claude ? 'all' : found.copilot ? 'copilot' : found.claude ? 'claude' : 'all';
+  console.log(`Detected: Copilot ${found.copilot ? 'yes' : 'no'}, Claude Code ${found.claude ? 'yes' : 'no'}`);
+  if (!process.stdin.isTTY) return dflt;
+  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise((resolve) => rl.question(`Install to [copilot / claude / all] (${dflt}): `, resolve));
+  rl.close();
+  const t = answer.trim().toLowerCase() || dflt;
+  return ['copilot', 'claude', 'all'].includes(t) ? t : dflt;
+}
 
-if (['copilot', 'all'].includes(target)) {
-  emit('copilot', path.join(os.homedir(), '.copilot'));
-  console.log('Copilot: installed to ~/.copilot');
-  if (!flag('--skip-plugins') && !has('copilot')) {
-    console.log(['copilot CLI not on PATH; install the plugins from inside a Copilot session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  then: npx skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'].join('\n'));
-    setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
-  } else if (!flag('--skip-plugins')) {
-    sh('copilot plugin marketplace add DietrichGebert/ponytail');
-    sh('copilot plugin install ponytail@ponytail');
-    sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'); // core skill only; the other 19 are extras
-    setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
+(async () => {
+  const BANNER = `
+   █████╗  ██╗    ██╗  █████╗  ██╗   ██╗
+  ██╔══██╗ ██║    ██║ ██╔══██╗ ╚██╗ ██╔╝
+  ███████║ ██║ █╗ ██║ ███████║  ╚████╔╝
+  ██╔══██║ ██║███╗██║ ██╔══██║   ╚██╔╝
+  ██║  ██║ ╚███╔███╔╝ ██║  ██║    ██║
+  ╚═╝  ╚═╝  ╚══╝╚══╝  ╚═╝  ╚═╝    ╚═╝
+  ████████╗ ███████╗  █████╗  ███╗   ███╗
+  ╚══██╔══╝ ██╔════╝ ██╔══██╗ ████╗ ████║
+     ██║    █████╗   ███████║ ██╔████╔██║
+     ██║    ██╔══╝   ██╔══██║ ██║╚██╔╝██║
+     ██║    ██║      ██║  ██║ ██║ ╚═╝ ██║
+     ╚═╝    ╚══════╝ ╚═╝  ╚═╝ ╚═╝     ╚═╝
+  `;
+  console.log(BANNER + `  away-team v${pkg.version} · beaming down the crew\n`);
+  if (!target) target = await pickTarget();
+
+
+  if (['copilot', 'all'].includes(target)) {
+    emit('copilot', path.join(os.homedir(), '.copilot'));
+    console.log('Copilot: installed to ~/.copilot');
+    if (!flag('--skip-plugins') && !has('copilot')) {
+      console.log(['copilot CLI not on PATH; install the plugins from inside a Copilot session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  then: npx skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'].join('\n'));
+      setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
+    } else if (!flag('--skip-plugins')) {
+      sh('copilot plugin marketplace add DietrichGebert/ponytail');
+      sh('copilot plugin install ponytail@ponytail');
+      sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot -s caveman -y --copy'); // core skill only; the other 19 are extras
+      setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
+    }
   }
-}
-if (['claude', 'all'].includes(target)) {
-  emit('claude', path.join(os.homedir(), '.claude'));
-  console.log('Claude Code: installed to ~/.claude');
-  if (!flag('--skip-plugins') && !has('claude')) {
-    console.log(['claude CLI not on PATH; install the plugins from inside a Claude Code session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  /plugin marketplace add JuliusBrussee/caveman', '  /plugin install caveman@caveman'].join('\n'));
-  } else if (!flag('--skip-plugins')) {
-    sh('claude plugin marketplace add DietrichGebert/ponytail');
-    sh('claude plugin install ponytail@ponytail');
-    sh('claude plugin marketplace add JuliusBrussee/caveman');
-    sh('claude plugin install caveman@caveman');
+  if (['claude', 'all'].includes(target)) {
+    emit('claude', path.join(os.homedir(), '.claude'));
+    console.log('Claude Code: installed to ~/.claude');
+    if (!flag('--skip-plugins') && !has('claude')) {
+      console.log(['claude CLI not on PATH; install the plugins from inside a Claude Code session:', '  /plugin marketplace add DietrichGebert/ponytail', '  /plugin install ponytail@ponytail', '  /plugin marketplace add JuliusBrussee/caveman', '  /plugin install caveman@caveman'].join('\n'));
+    } else if (!flag('--skip-plugins')) {
+      sh('claude plugin marketplace add DietrichGebert/ponytail');
+      sh('claude plugin install ponytail@ponytail');
+      sh('claude plugin marketplace add JuliusBrussee/caveman');
+      sh('claude plugin install caveman@caveman');
+    }
   }
-}
-if (!flag('--skip-plugins')) {
-  setDefaultMode('ponytail');
-  setDefaultMode('caveman');
-}
+  if (!flag('--skip-plugins')) {
+    setDefaultMode('ponytail');
+    setDefaultMode('caveman');
+  }
+})();

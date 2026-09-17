@@ -31,8 +31,8 @@ dist/copilot, dist/claude prebuilt plugins (generated, committed)
 **npx** (Windows, Mac, Linux; installs ponytail and caveman too):
 
 ```bash
-npx @scotscottmca/away-team                          # Copilot + Claude Code
-npx @scotscottmca/away-team --target claude          # copilot | claude | all
+npx @scotscottmca/away-team                          # detects Copilot / Claude Code, asks which to install to
+npx @scotscottmca/away-team --target claude          # copilot | claude | all, no prompt
 npx @scotscottmca/away-team --skip-plugins
 npx @scotscottmca/away-team --level full             # ponytail + caveman default level (ultra)
 npx github:scotscottmca/away-team                    # same, straight from GitHub
