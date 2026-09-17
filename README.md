@@ -32,7 +32,8 @@ dist/copilot, dist/claude prebuilt plugins (generated, committed)
 
 ```bash
 npx @scotscottmca/away-team                          # detects Copilot / Claude Code, asks which to install to
-npx @scotscottmca/away-team --target claude          # copilot | claude | all, no prompt
+npx @scotscottmca/away-team --target claude          # copilot | claude | all, skips that prompt
+npx @scotscottmca/away-team --yes                    # accept every default, no prompts
 npx @scotscottmca/away-team --skip-plugins
 npx @scotscottmca/away-team --level full             # ponytail + caveman default level (ultra)
 npx github:scotscottmca/away-team                    # same, straight from GitHub
