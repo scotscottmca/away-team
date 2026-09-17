@@ -6,6 +6,7 @@
   "files": ["bin", "agents", "skills", "README.md", "LICENSE"],
   "scripts": {
     "build": "node bin/away-team.js --build",
+    "version": "npm run build && git add dist",
     "prepublishOnly": "npm run build"
   },
   "author": { "name": "scotscottmca", "url": "https://github.com/scotscottmca" },

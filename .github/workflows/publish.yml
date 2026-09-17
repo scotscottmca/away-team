@@ -1,0 +1,22 @@
+# Publishes to npm when a v* tag is pushed (npm version patch && git push --follow-tags).
+# Auth: NPM_TOKEN repo secret (granular token, publish scope, bypass 2FA), or npm trusted publishing via OIDC if configured.
+name: publish
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm run build
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

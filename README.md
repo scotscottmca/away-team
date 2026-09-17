@@ -103,12 +103,12 @@ Copilot per 1M tokens, input / output: Luna 0.20 / 1.20, Sonnet 5 2 / 10, Opus 5
 ## Release
 
 ```bash
-npm version patch        # bump; prepublishOnly rebuilds dist on publish
-npm publish
-git add dist && git commit -m "chore: rebuild dist" && git push --follow-tags
+npm version patch && git push --follow-tags
 ```
 
-`dist/` is committed so the marketplaces serve prebuilt plugins. After changing agents or skills, run `npm run build` and commit the result.
+`npm version` rebuilds `dist/` and includes it in the version commit, so the marketplaces always serve the tagged build. The pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm.
+
+One-time setup: create a granular npm access token (packages: read and write, bypass 2FA) and add it as the `NPM_TOKEN` repository secret. Or configure npm trusted publishing for this repo and workflow and leave the secret unset; the workflow already grants `id-token: write`.
 
 ## Sources
 
