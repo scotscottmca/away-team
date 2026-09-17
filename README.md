@@ -33,6 +33,7 @@ dist/copilot, dist/claude prebuilt plugins (generated, committed)
 ```bash
 npx @scotscottmca/away-team                          # detects Copilot / Claude Code, asks which to install to
 npx @scotscottmca/away-team --target claude          # copilot | claude | all, skips that prompt
+npx @scotscottmca/away-team --scope project          # into this repo: .github/ (Copilot), .claude/ (Claude Code)
 npx @scotscottmca/away-team --yes                    # accept every default, no prompts
 npx @scotscottmca/away-team --skip-plugins
 npx @scotscottmca/away-team --level full             # ponytail + caveman default level (ultra)
@@ -49,7 +50,7 @@ claude plugin marketplace add scotscottmca/away-team
 claude plugin install away-team@away-team
 ```
 
-**Per repo**: copy `dist/copilot/agents` into the project's `.github/agents/` (Copilot) or `dist/claude/agents` into `.claude/agents/` (Claude Code).
+**Per repo**: run the installer inside a git repo and pick **Project** scope (or `--scope project`). It writes the agents and skills to `.github/` for Copilot and `.claude/` for Claude Code, to commit with the code. Teammates then get them with no install, and the Copilot cloud agent on github.com can use them. Ponytail, caveman and the level setting are per user and stay with the global install. Default is Global.
 
 What the npx install writes:
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // away-team installer.
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
-//   flags skip the matching prompt:  --target copilot|claude|all   --skip-plugins   --level lite|full|ultra   --yes
+//   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -22,6 +22,8 @@ const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 const home = (...p) => path.join(os.homedir(), ...p);
+// Root of the git repo we are running in, if any: enables project scope.
+const repoRoot = (() => { const r = spawnSync('git rev-parse --show-toplevel', { shell: true, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; })();
 
 function render(text, platform) {
   return text.split(/\r?\n/).map((line) => {
@@ -181,9 +183,24 @@ const BANNER = `
     }));
   }
 
-  // Companions
-  let companions = flag('--skip-plugins') ? [] : ['ponytail', 'caveman'];
-  if (interactive && !flag('--skip-plugins')) {
+  // Scope: global (this user) or project (committed in this repo; teammates and the Copilot cloud agent get it)
+  let scope = opt('--scope') === 'project' ? 'project' : 'global';
+  if (interactive && repoRoot && !opt('--scope')) {
+    scope = bail(await p.select({
+      message: 'Scope',
+      options: [
+        { value: 'global', label: 'Global', hint: 'this user, every repo' },
+        { value: 'project', label: 'Project', hint: `${repoRoot}, committed; shared with teammates and the Copilot cloud agent` },
+      ],
+      initialValue: 'global',
+    }));
+  }
+  if (scope === 'project' && !repoRoot) { p.cancel('--scope project needs to run inside a git repository.'); process.exit(1); }
+  const destFor = (t) => scope === 'project' ? path.join(repoRoot, t === 'copilot' ? '.github' : '.claude') : home(t === 'copilot' ? '.copilot' : '.claude');
+
+  // Companions (user-level plugins; not part of a project install)
+  let companions = flag('--skip-plugins') || scope === 'project' ? [] : ['ponytail', 'caveman'];
+  if (interactive && scope === 'global' && !flag('--skip-plugins')) {
     companions = bail(await p.multiselect({
       message: 'Companion plugins',
       options: [
@@ -212,7 +229,7 @@ const BANNER = `
   // Summary
   const rows = [];
   for (const t of targets) {
-    const dir = t === 'copilot' ? '~/.copilot' : '~/.claude';
+    const dir = scope === 'project' ? destFor(t) : (t === 'copilot' ? '~/.copilot' : '~/.claude');
     rows.push(c.cyan(`${dir}/agents`), `  ${agents.length} agents: ${agents.map((a) => a.replace(/\.agent\.md$/, '')).join(', ')}`);
     rows.push(c.cyan(`${dir}/skills`), `  ${skills.join(', ')}${t === 'claude' ? ', orchestrator' : ''}`);
     for (const name of companions) rows.push(c.cyan(`${name} → ${t}`), ...PLUGINS[t][name].map((x) => `  ${c.dim(x)}`));
@@ -229,7 +246,7 @@ const BANNER = `
   // Install
   const manual = [];
   for (const t of targets) {
-    const dest = t === 'copilot' ? home('.copilot') : home('.claude');
+    const dest = destFor(t);
     emit(t, dest);
     p.log.success(`${t === 'copilot' ? 'GitHub Copilot' : 'Claude Code'}: agents and skills → ${dest}`);
     if (t === 'copilot' && companions.includes('caveman')) setInstructionLine(home('.copilot', 'copilot-instructions.md'), level);
@@ -262,5 +279,6 @@ const BANNER = `
     p.note(m.cmds.join('\n'), `${PLUGINS[m.t].cli} CLI not on PATH: run these inside a ${m.t === 'copilot' ? 'Copilot' : 'Claude Code'} session`);
   }
 
-  p.outro(`Done. Select the orchestrator: ${c.cyan(targets.includes('copilot') ? '/agent → orchestrator' : '/orchestrator <request>')}`);
+  const how = c.cyan(targets.includes('copilot') ? '/agent → orchestrator' : '/orchestrator <request>');
+  p.outro(scope === 'project' ? `Done. Commit the new files, then select the orchestrator: ${how}` : `Done. Select the orchestrator: ${how}`);
 })();
