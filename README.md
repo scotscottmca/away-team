@@ -14,7 +14,7 @@ The point is spending fewer tokens on bug work without losing quality. Five thin
 
 ```
 agents/
-  orchestrator.agent.md   pick this one; it routes to the others
+  away-team.agent.md      pick this one; it routes to the others
   mapper.agent.md         writes docs/CODEMAP.md
   investigator.agent.md   read-only root cause → Diagnosis
   basher.agent.md         Diagnosis → failing test → minimal fix → commit
@@ -57,18 +57,18 @@ What the npx install writes:
 | | Copilot | Claude Code |
 |---|---|---|
 | agents | `~/.copilot/agents/*.agent.md` | `~/.claude/agents/*.md` |
-| skills | `~/.copilot/skills/` | `~/.claude/skills/` (plus `orchestrator` as a skill) |
+| skills | `~/.copilot/skills/` | `~/.claude/skills/` (plus `away-team` as a skill) |
 | ponytail | `copilot plugin install ponytail@ponytail` | `claude plugin install ponytail@ponytail` |
 | caveman | `npx skills add JuliusBrussee/caveman -s caveman` (core skill only; caveman has no Copilot marketplace manifest) | `claude plugin install caveman@caveman` |
 
-## Select the orchestrator
+## Select away-team
 
 | Platform | How |
 |---|---|
-| Copilot app / CLI | `/agent` → **orchestrator**, or `copilot --agent orchestrator` |
-| Claude Code CLI | `claude --agent orchestrator` |
-| Claude Code, any project, always | `"agent": "orchestrator"` in that project's `.claude/settings.json` |
-| Claude desktop app (no agent picker) | `/orchestrator <your request>` |
+| Copilot app / CLI | `/agent` → **away-team**, or `copilot --agent away-team` |
+| Claude Code CLI | `claude --agent away-team` |
+| Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
+| Claude desktop app (no agent picker) | `/away-team <your request>` |
 
 In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator adds the routing rules and gates.
 

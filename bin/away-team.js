@@ -50,12 +50,12 @@ function emit(platform, dest) {
   }
   fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
-    const raw = read('orchestrator.agent.md');
+    const raw = read('away-team.agent.md');
     const desc = raw.match(/^description: (.*)$/m)[1];
     const body = raw.split(/^---\r?\n/m)[2];
-    const dir = path.join(dest, 'skills', 'orchestrator');
+    const dir = path.join(dest, 'skills', 'away-team');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: orchestrator\ndescription: ${desc}\n---\n\n${body}`);
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: away-team\ndescription: ${desc}\n---\n\n${body}`);
   }
 }
 
@@ -231,7 +231,7 @@ const BANNER = `
   for (const t of targets) {
     const dir = scope === 'project' ? destFor(t) : (t === 'copilot' ? '~/.copilot' : '~/.claude');
     rows.push(c.cyan(`${dir}/agents`), `  ${agents.length} agents: ${agents.map((a) => a.replace(/\.agent\.md$/, '')).join(', ')}`);
-    rows.push(c.cyan(`${dir}/skills`), `  ${skills.join(', ')}${t === 'claude' ? ', orchestrator' : ''}`);
+    rows.push(c.cyan(`${dir}/skills`), `  ${skills.join(', ')}${t === 'claude' ? ', away-team' : ''}`);
     for (const name of companions) rows.push(c.cyan(`${name} → ${t}`), ...PLUGINS[t][name].map((x) => `  ${c.dim(x)}`));
     rows.push('');
   }
@@ -279,6 +279,6 @@ const BANNER = `
     p.note(m.cmds.join('\n'), `${PLUGINS[m.t].cli} CLI not on PATH: run these inside a ${m.t === 'copilot' ? 'Copilot' : 'Claude Code'} session`);
   }
 
-  const how = c.cyan(targets.includes('copilot') ? '/agent → orchestrator' : '/orchestrator <request>');
+  const how = c.cyan(targets.includes('copilot') ? '/agent → away-team' : '/away-team <request>');
   p.outro(scope === 'project' ? `Done. Commit the new files, then select the orchestrator: ${how}` : `Done. Select the orchestrator: ${how}`);
 })();
