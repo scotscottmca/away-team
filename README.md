@@ -121,15 +121,13 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 
 ## Contributing
 
-Edit `agents/` and `skills/` only; `dist/` is generated. Run `npm run build` and commit the result with your change.
+Edit `agents/` and `skills/` only; `dist/` is generated on release.
 
 ## Release
 
-```bash
-npm version patch && git push --follow-tags
-```
+Every push to `main` is a release. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm, so docs, agents, `dist/` and the npm package always match. Pull after each push to pick up the version commit.
 
-`npm version` rebuilds `dist/` and includes it in the version commit, so the marketplaces always serve the tagged build. The pushed `v*` tag triggers `.github/workflows/publish.yml`, which publishes to npm.
+For a minor or major bump, run `npm version minor` (or `major`) locally and push; the workflow sees that version is not on npm yet and publishes it as is.
 
 One-time setup: create a granular npm access token (packages: read and write, bypass 2FA) and add it as the `NPM_TOKEN` repository secret. Or configure npm trusted publishing for this repo and workflow and leave the secret unset; the workflow already grants `id-token: write`.
 
