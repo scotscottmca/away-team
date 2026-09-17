@@ -1,4 +1,4 @@
-![away-team: multi-agent orchestrator](https://raw.githubusercontent.com/scotscottmca/away-team/main/docs/away-team.jpeg)
+![away-team: multi-agent orchestrator](docs/away-team.jpeg)
 
 # away-team
 
