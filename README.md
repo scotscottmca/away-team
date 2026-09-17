@@ -66,6 +66,7 @@ What the npx install writes:
 | Platform | How |
 |---|---|
 | Copilot app / CLI | `/agent` → **away-team**, or `copilot --agent away-team` |
+| | Both read the agent list when a chat session starts: after installing, start a new session before looking for it. |
 | Claude Code CLI | `claude --agent away-team` |
 | Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
 | Claude desktop app (no agent picker) | `/away-team <your request>` |
