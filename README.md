@@ -1,3 +1,5 @@
+![away-team: multi-agent orchestrator](https://raw.githubusercontent.com/scotscottmca/away-team/main/docs/away-team.jpeg)
+
 # away-team
 
 An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
