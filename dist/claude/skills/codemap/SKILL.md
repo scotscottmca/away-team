@@ -43,6 +43,9 @@ One representative request per entry point, traced layer to layer to store.
 ## Data stores and external services
 Tables or collections that matter, migrations location, external APIs and their client classes.
 
+## Contracts
+Where the sources of truth between layers live: OpenAPI specs, schemas, shared interfaces, module manifests, generated clients and what generates them. These are the seams a task can be cut along.
+
 ## Invariants and conventions
 Things that must stay true, especially absences. "Only `Infrastructure/` talks to SQL." "Money is `decimal`, never `double`." Error handling, logging, DI, config, feature-flag conventions.
 

@@ -14,6 +14,7 @@ You produce one file, `docs/CODEMAP.md`, using the `codemap` skill template. Not
 3. **Entry points.** `Program.cs` / `Startup.cs`, minimal-API and controller routes, `main.go`, `index.php`, `src/index.tsx`, Azure Functions, queue and timer consumers, CLI mains.
 4. **Trace one request end to end per entry point.** Handler → service → repository / DB / external call. Record layers and key types, not every file.
 5. **Invariants and conventions**, especially absences: "nothing below `Services/` touches `HttpContext`", "all SQL goes through `Infrastructure/`".
+   **Contracts** between layers: OpenAPI specs, schemas, shared interfaces, module manifests, generated clients and their generator. Name the file and which side owns it.
 6. **Hot spots.** `git log --since=6.months --name-only --format= | sort | uniq -c | sort -rn | head -20`, plus files with many importers.
 7. **Commands.** Record only build / test / run commands you actually ran and that worked.
 

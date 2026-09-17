@@ -10,7 +10,8 @@ The point is spending fewer tokens on bug work without losing quality. Five thin
 2. **Narrow, read-only specialists.** The investigator cannot edit and the orchestrator cannot run code, so each context window holds only what that job needs.
 3. **Summaries, not transcripts.** Every handoff is a fixed report (Diagnosis, Fix report). Nothing is re-verified downstream.
 4. **A persistent code map.** `docs/CODEMAP.md` is written once and refreshed by diff, so agents stop re-reading the repo every session.
-5. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
+5. **Seams.** A bug that spans layers or services is cut at the cleanest boundary and investigated as two to four small parallel runs, each holding only its own files and the contract between them, instead of one large run.
+6. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
 
 ```
 agents/
@@ -22,6 +23,7 @@ agents/
 skills/
   codemap/SKILL.md        CODEMAP.md template + rules
   pr-format/SKILL.md      PR template + gh commands
+  seams/SKILL.md          cut a cross-layer task into cheap independent runs
 bin/away-team.js          installer; also renders dist/ for the plugin marketplaces
 dist/copilot, dist/claude prebuilt plugins (generated, committed)
 ```
