@@ -34,6 +34,7 @@ dist/copilot, dist/claude prebuilt plugins (generated, committed)
 npx away-team                          # Copilot + Claude Code
 npx away-team --target claude          # copilot | claude | all
 npx away-team --skip-plugins
+npx away-team --level full             # ponytail + caveman default level (ultra)
 npx github:scotscottmca/away-team      # same, straight from GitHub
 ```
 
@@ -78,7 +79,7 @@ In Claude Code the four workers are also picked up automatically by any normal s
 
 Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing.
 
-Ponytail levels: `/ponytail lite|full|ultra` (Copilot namespaces it `/ponytail:ponytail`). Caveman: `/caveman lite|full|ultra`.
+Ponytail and caveman both default to **ultra**. Change the default with `npx away-team --level lite|full|ultra` (it writes each plugin's `config.json`, and a line in `~/.copilot/copilot-instructions.md` because caveman has no hooks on Copilot). Change it for one session with `/ponytail full` (Copilot namespaces it `/ponytail:ponytail`) or `/caveman full`.
 
 ## Model tiers
 

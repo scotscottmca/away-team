@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // away-team installer.
-//   npx away-team [--target copilot|claude|all] [--skip-plugins]   install user-level (~/.copilot, ~/.claude)
+//   npx away-team [--target copilot|claude|all] [--skip-plugins] [--level lite|full|ultra]
+//                                                                  install user-level (~/.copilot, ~/.claude); level sets the
+//                                                                  ponytail + caveman default (ultra); /ponytail or /caveman <level> per session
 //   node bin/away-team.js --build                                  render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -18,8 +20,35 @@ const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execu
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
-const ti = args.indexOf('--target');
-const target = ti >= 0 ? args[ti + 1] : 'all';
+const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
+const target = opt('--target', 'all');
+const level = opt('--level', 'ultra');
+
+// ponytail and caveman both read defaultMode from $XDG_CONFIG_HOME/<name>/config.json,
+// else %APPDATA%\<name>\config.json on Windows, else ~/.config/<name>/config.json.
+function setDefaultMode(name) {
+  const dir = process.env.XDG_CONFIG_HOME ? path.join(process.env.XDG_CONFIG_HOME, name)
+    : process.platform === 'win32' ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), name)
+    : path.join(os.homedir(), '.config', name);
+  const file = path.join(dir, 'config.json');
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  cfg.defaultMode = level;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+  console.log(`${name}: defaultMode=${level} (${file})`);
+}
+
+// Caveman on Copilot is skill-only (no hooks), so its default level has to come from personal instructions.
+const MARK = '<!-- away-team -->';
+function setInstructionLine(file) {
+  let cur = '';
+  try { cur = fs.readFileSync(file, 'utf8'); } catch {}
+  const line = `${MARK} Caveman and ponytail run at level "${level}" by default. Switch for a session with /caveman <level> or /ponytail <level>.`;
+  cur = cur.includes(MARK) ? cur.replace(/<!-- away-team -->.*/, line) : `${cur.trimEnd()}\n\n${line}\n`.trimStart();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, cur);
+}
 
 function render(text, platform) {
   return text.split(/\r?\n/).map((line) => {
@@ -83,6 +112,7 @@ if (['copilot', 'all'].includes(target)) {
     sh('copilot plugin marketplace add DietrichGebert/ponytail');
     sh('copilot plugin install ponytail@ponytail');
     sh('npx -y skills add JuliusBrussee/caveman -g -a github-copilot');
+    setInstructionLine(path.join(os.homedir(), '.copilot', 'copilot-instructions.md'));
   }
 }
 if (['claude', 'all'].includes(target)) {
@@ -94,4 +124,8 @@ if (['claude', 'all'].includes(target)) {
     sh('claude plugin marketplace add JuliusBrussee/caveman');
     sh('claude plugin install caveman@caveman');
   }
+}
+if (!flag('--skip-plugins')) {
+  setDefaultMode('ponytail');
+  setDefaultMode('caveman');
 }
