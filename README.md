@@ -8,7 +8,7 @@ The point is spending fewer tokens on bug work without losing quality. Six thing
 
 1. **Right model per job.** Each agent declares a tier (cheap, balanced, strong) rather than a model. Reading a repo is cheap-tier work; root-causing is the one place the strong tier pays for itself.
 2. **Narrow, read-only specialists.** The investigator cannot edit and the orchestrator cannot run code, so each context window holds only what that job needs.
-3. **Summaries, not transcripts.** Every handoff is a fixed report (Diagnosis, Fix report). Nothing is re-verified downstream.
+3. **Reports by reference.** Output tokens cost about five times input, and anything a subagent returns gets re-read, and often retyped, by the agent above it. So each specialist writes its full report to `.away-team/` and returns five lines; the orchestrator hands the next specialist a path, never the contents. Nothing is re-verified downstream.
 4. **A persistent code map.** `docs/CODEMAP.md` is written once and refreshed by diff, so agents stop re-reading the repo every session.
 5. **A context budget per agent.** Search before reading, read windows not files, run one test not the suite, cap command output, skip vendored trees. The orchestrator is the only long-lived context, so it reads almost nothing itself, holds only the latest reports, and suggests a fresh session per bug.
 6. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
@@ -121,7 +121,8 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 ## Why it is built this way
 
 - **Stateless subagents.** Both platforms spin up a fresh context per delegation, so every handoff is a self-contained report (Diagnosis, Fix report), never a transcript. Same pattern as awesome-copilot's `gem-orchestrator` / `gem-debugger`.
-- **Investigator never edits.** Read-only tools make "diagnose, don't patch the symptom" a hard constraint. Three falsified hypotheses is the stop rule (superpowers `systematic-debugging`).
+- **Caching.** Prompt caching is automatic on both platforms and keyed on an exact prefix per model. The agent prompts are fully static, so that prefix is reused whenever a specialist is called again inside the cache window, and one call per step keeps the number of cold starts down. The orchestrator's context is kept small so that a cache expiry while you think at a gate costs almost nothing to rebuild.
+- **Investigator never edits code.** It has no edit tool; the only file it writes is its own report, through the shell. Read-only tools make "diagnose, don't patch the symptom" a hard constraint. Three falsified hypotheses is the stop rule (superpowers `systematic-debugging`).
 - **CODEMAP.md is the memory.** Persistent, committed, refreshed by diff against its own `commit:` header. Names not links, invariants not file lists (matklad's ARCHITECTURE.md guidance). Basher updates it when a fix moves a boundary.
 - **PR body is the TL;DR.** Line-level reasoning goes in one review via the REST API (`gh pr comment` cannot do inline), narrative in one top-level comment.
 - **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ. The installer rewrites those two lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.

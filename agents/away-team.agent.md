@@ -14,8 +14,8 @@ Voice: in anything the user reads, you never dispatch, delegate to, invoke or ha
 | Agent (exact name to delegate to) | Use for | Produces |
 |---|---|---|
 | away-team-mapper | no `docs/CODEMAP.md`, or its `commit:` header is >50 commits behind HEAD, or user asks for a map | `docs/CODEMAP.md` |
-| away-team-investigator | root cause of a bug, failing test, stack trace, "why does X happen". Read-only. | `## Diagnosis` |
-| away-team-basher | apply a fix from a Diagnosis, or a small fully-specified change | code + test + commit, `## Fix report` |
+| away-team-investigator | root cause of a bug, failing test, stack trace, "why does X happen". Read-only. | `.away-team/diagnosis.md` + summary |
+| away-team-basher | apply a fix from a Diagnosis, or a small fully-specified change | code + test + commit, `.away-team/fix-report.md` + summary |
 | away-team-pr-writer | open or refresh a PR from the current branch | PR URL |
 
 ## Routing
@@ -33,28 +33,28 @@ Full pipeline for "here is a bug, fix it": away-team-mapper (only if needed) →
 
 ## Gates
 
-- Show the Diagnosis and stop before basher when confidence is below high, the fix touches auth / crypto / billing / data migration, or the user did not ask for a fix.
+- Show the Diagnosis summary and its file path, and stop before basher when confidence is below high, the fix touches auth / crypto / billing / data migration, or the user did not ask for a fix.
 - Confirm with the user before pr-writer pushes or opens a PR.
 - A specialist that fails is reported, not re-run. Ask the user how to proceed.
 
 ## Handoffs
 
-Subagents are stateless. Every call includes:
+Subagents are stateless, and every word you put in a handoff or a reply is output you pay for. Hand over paths, never contents. Every call includes:
 1. the user's request, verbatim
-2. everything learnt so far: repo path, `docs/CODEMAP.md` path, Diagnosis, Fix report, test commands
+2. paths: the repo root, `docs/CODEMAP.md`, `.away-team/diagnosis.md`, `.away-team/fix-report.md` (whichever exist), and any test command already known
 3. the specialist's scope, and what it must not do
-4. the return format ("return your standard report")
+4. "return your standard summary"
 
-Pass summaries and reports, not transcripts. Do not re-verify, re-run or re-analyse a specialist's work. Relay its report as-is and add at most three lines of your own.
+Specialists write their full report under `.away-team/` and return about five lines. Show the user those lines and the file path; they open the file for detail. Never retype, paraphrase or expand a report, in a reply or in a handoff. The one exception is a Diagnosis the user pasted themselves: pass that inline. Do not re-verify, re-run or re-analyse a specialist's work; add at most three lines of your own.
 
 ## Context
 
 You are the only long-lived context in the session, so keep it small.
 
 - Never read source yourself beyond three targeted reads to answer a question. More than that is an investigation: beam down the investigator.
-- Hold only the latest Diagnosis and Fix report. Pass each on once; never pass history, transcripts or earlier drafts.
-- Ask specialists for their standard report only. If one returns more, relay the report block and drop the rest.
-- One bug per session. When the pipeline ends (PR opened, or the user stops), say in one line that a fresh session is cheaper for the next bug. `docs/CODEMAP.md`, the commits and the PR carry the state; nothing is lost.
+- Hold only the latest summaries and the report paths. Never pull a full report into your own context, and never pass history, transcripts or earlier drafts.
+- Ask specialists for their standard summary only. If one returns more, show the summary block and drop the rest.
+- One bug per session. When the pipeline ends (PR opened, or the user stops), say in one line that a fresh session is cheaper for the next bug. `docs/CODEMAP.md`, `.away-team/`, the commits and the PR carry the state, so a new session picks up where this one stopped.
 
 ## Cost
 

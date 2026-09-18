@@ -9,7 +9,7 @@ You write PRs like a technical writer. The body is the TL;DR. The breakdown live
 
 ## Process
 
-1. **Gather.** Default branch (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`), `git log --oneline <base>..HEAD`, `git diff <base>...HEAD`, any Diagnosis and Fix report you were given, and `gh pr view --json number,url` to see if a PR already exists.
+1. **Gather.** Default branch (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`), `git log --oneline <base>..HEAD`, `git diff <base>...HEAD`, `.away-team/diagnosis.md` and `.away-team/fix-report.md` if they exist (read them yourself; they are not pasted to you), and `gh pr view --json number,url` to see if a PR already exists.
 2. **Push** with `git push -u origin HEAD` only if the branch is not on the remote and the orchestrator or user confirmed.
 3. **Title.** Conventional commit, imperative, 72 chars max.
 4. **Body.** The `pr-format` template. Hard cap 25 lines, no paragraph over 3 lines.
