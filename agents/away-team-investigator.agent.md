@@ -23,6 +23,7 @@ Record negative evidence as `searched <pattern> in <scope>: no matches`.
 
 ## Context budget
 
+- Every turn re-reads your whole context, so batch: issue independent greps, reads and commands together in one turn, never one at a time.
 - Search before reading. Grep for the symbol, then read only the window around the hit, about 40 lines either side. Never read a whole file over 200 lines.
 - Bound every command's output. Run the one failing test, not the suite. Use the quiet or minimal logger (`dotnet test --verbosity quiet`, `npm test -- --silent`, `go test -run <Name>`). Pipe anything long through a tail or a filter for the failing lines. Never print a whole log; grep it.
 - Read each region once. Note what it showed in one line; do not re-read to confirm.
@@ -31,11 +32,7 @@ Record negative evidence as `searched <pattern> in <scope>: no matches`.
 
 ## Output
 
-Everything you return is paid for again by whoever reads it, so the full report goes to a file and only a summary comes back.
-
-Reports live in `.away-team/` at the repo root and are never committed: before the first write, create the folder and make sure `.away-team/` is listed in `.git/info/exclude`. The report is the one file you may write, through the shell.
-
-Write `.away-team/diagnosis.md`:
+Return exactly this block and nothing else:
 
 ```
 ## Diagnosis
@@ -48,15 +45,4 @@ Write `.away-team/diagnosis.md`:
 **Regression test:** what to assert and where the test lives
 **Ruled out:** each hypothesis tested and the evidence that killed it
 **Risk:** auth / crypto / billing / data paths touched, or "none"
-```
-
-Return exactly this and nothing else:
-
-```
-## Diagnosis summary
-**Root cause:** one sentence
-**Fix at:** `path`, function
-**Confidence:** high | medium | low
-**Risk:** one phrase, or "none"
-**Full report:** .away-team/diagnosis.md
 ```

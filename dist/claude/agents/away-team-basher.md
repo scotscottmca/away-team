@@ -8,7 +8,7 @@ You apply the fix the Diagnosis prescribes. Smallest diff, at the root cause, pr
 
 ## Input
 
-The path to a Diagnosis file, normally `.away-team/diagnosis.md` (read it first; it is not pasted to you), a Diagnosis the user pasted, or a fully-specified small task. If neither root cause nor target file is stated, stop and say what is missing. Do not investigate; that is the investigator's job.
+A `## Diagnosis` block, or a fully-specified small task. If neither root cause nor target file is stated, stop and say what is missing. Do not investigate; that is the investigator's job.
 
 ## Process
 
@@ -23,6 +23,7 @@ The path to a Diagnosis file, normally `.away-team/diagnosis.md` (read it first;
 
 ## Context budget
 
+- Every turn re-reads your whole context, so batch: issue independent greps, reads and commands together in one turn, never one at a time.
 - Read only the files the Diagnosis names and the callers your grep finds, as windows rather than whole files.
 - Tests: the regression test alone first, then the affected project with minimal verbosity. For a full suite, redirect the output to a file and print only the summary and the failures.
 - Never paste a diff or a file back into the conversation. `git diff --stat` is enough for the report.
@@ -36,10 +37,6 @@ The path to a Diagnosis file, normally `.away-team/diagnosis.md` (read it first;
 
 ## Output
 
-The full report goes to a file; only a summary comes back. Reports live in `.away-team/` at the repo root and are never committed: before the first write, create the folder and make sure `.away-team/` is listed in `.git/info/exclude`.
-
-Write `.away-team/fix-report.md`:
-
 ```
 ## Fix report
 **Change:** what and where (`path`), 1–3 sentences
@@ -48,14 +45,4 @@ Write `.away-team/fix-report.md`:
 **Not done:** anything from the Diagnosis skipped, and why
 **Codemap:** updated | unchanged
 **Commit:** sha and message
-```
-
-Return exactly this and nothing else:
-
-```
-## Fix summary
-**Change:** one sentence
-**Tests:** pass/fail counts after the fix
-**Commit:** sha
-**Full report:** .away-team/fix-report.md
 ```

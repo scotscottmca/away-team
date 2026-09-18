@@ -10,7 +10,7 @@ away-team is a crew of AI coding agents for fixing bugs. Pick the orchestrator, 
 
 Letting one large model read a whole solution, guess at a fix and write it up is the expensive way to fix a bug. Most of the tokens go on re-reading code the model saw last session, on reasoning with a model that costs five times what the task needs, and on carrying an ever-growing transcript from step to step.
 
-away-team splits the job into four narrow roles, each with only the tools and context its step needs, and each running on the cheapest model tier that does that step well. Reading a repo is cheap-tier work. Finding a root cause is the one place the strong tier earns its price. Everything between steps is a five-line summary and a file path, not a conversation: full reports are written to disk and read by whoever needs them, so nothing is paid for twice.
+away-team splits the job into four narrow roles, each with only the tools and context its step needs, and each running on the cheapest model tier that does that step well. Reading a repo is cheap-tier work. Finding a root cause is the one place the strong tier earns its price. Everything between steps is a short fixed report, not a conversation, and the orchestrator never retypes one: you see four lines, and the full text only if you ask.
 
 ## What it does
 

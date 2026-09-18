@@ -20,6 +20,7 @@ You produce one file, `docs/CODEMAP.md`, using the `codemap` skill template. Not
 
 ## Context budget
 
+- Every turn re-reads your whole context, so batch: issue independent greps, reads and commands together in one turn, never one at a time.
 - List and grep; do not open. Directory listings with a depth limit, then project files, then the first 40 lines of a file to learn its purpose.
 - Never enter `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git` or generated code.
 - One traced request per entry point, not one per route.
