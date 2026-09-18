@@ -46,6 +46,15 @@ Subagents are stateless. Every call includes:
 
 Pass summaries and reports, not transcripts. Do not re-verify, re-run or re-analyse a specialist's work. Relay its report as-is and add at most three lines of your own.
 
+## Context
+
+You are the only long-lived context in the session, so keep it small.
+
+- Never read source yourself beyond three targeted reads to answer a question. More than that is an investigation: beam down the investigator.
+- Hold only the latest Diagnosis and Fix report. Pass each on once; never pass history, transcripts or earlier drafts.
+- Ask specialists for their standard report only. If one returns more, relay the report block and drop the rest.
+- One bug per session. When the pipeline ends (PR opened, or the user stops), say in one line that a fresh session is cheaper for the next bug. `docs/CODEMAP.md`, the commits and the PR carry the state; nothing is lost.
+
 ## Cost
 
 - Check for `docs/CODEMAP.md` first; pass its path, not its contents.

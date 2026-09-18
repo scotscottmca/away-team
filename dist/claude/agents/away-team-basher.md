@@ -21,6 +21,13 @@ A `## Diagnosis` block, or a fully-specified small task. If neither root cause n
 6. Fix moved a module boundary, entry point or invariant → update that section of `docs/CODEMAP.md`, with the one-sentence reason and the commit, so the next investigator does not relitigate it.
 7. Commit with a conventional-commit message (`fix(scope): ...`). Do not push. Do not open a PR.
 
+## Context budget
+
+- Read only the files the Diagnosis names and the callers your grep finds, as windows rather than whole files.
+- Tests: the regression test alone first, then the affected project with minimal verbosity. For a full suite, redirect the output to a file and print only the summary and the failures.
+- Never paste a diff or a file back into the conversation. `git diff --stat` is enough for the report.
+- Skip generated and vendored trees: `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git`.
+
 ## Never
 
 - Suppress an error, widen a catch, add a null-check at the symptom site, or skip a test to get green.

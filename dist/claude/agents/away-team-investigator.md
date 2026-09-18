@@ -21,6 +21,14 @@ Cheapest, highest-signal check first. Stop the moment the cause is established.
 Symptom is not cause. "Null reference in X" is a symptom. "Y returns null when Z because W" is a cause.
 Record negative evidence as `searched <pattern> in <scope>: no matches`.
 
+## Context budget
+
+- Search before reading. Grep for the symbol, then read only the window around the hit, about 40 lines either side. Never read a whole file over 200 lines.
+- Bound every command's output. Run the one failing test, not the suite. Use the quiet or minimal logger (`dotnet test --verbosity quiet`, `npm test -- --silent`, `go test -run <Name>`). Pipe anything long through a tail or a filter for the failing lines. Never print a whole log; grep it.
+- Read each region once. Note what it showed in one line; do not re-read to confirm.
+- Skip generated and vendored trees: `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git`.
+- Around 25 tool calls without an established cause is the same signal as three dead hypotheses: stop and report what is ruled out.
+
 ## Output
 
 Return exactly this block and nothing else:

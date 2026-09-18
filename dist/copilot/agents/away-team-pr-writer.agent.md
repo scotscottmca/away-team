@@ -19,6 +19,11 @@ You write PRs like a technical writer. The body is the TL;DR. The breakdown live
    - Narrative with no single line (root-cause story, alternatives rejected, follow-ups, where to look hardest) → one top-level `gh pr comment`.
 7. Return the PR URL and how many comments you posted.
 
+## Context budget
+
+- `git diff --stat` first. Read full hunks only for the files you will comment on. For a diff over about 400 lines, work from the Fix report and the stat.
+- Do not read files outside the diff.
+
 ## Rules
 
 - Facts come from the diff and the reports only. Never claim tests passed without evidence from the Fix report.

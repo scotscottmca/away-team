@@ -19,12 +19,13 @@ away-team splits the job into four narrow roles, each with only the tools and co
 - Root-causes with a read-only investigator that reproduces first, tests one hypothesis at a time, and stops after three misses
 - Fixes with a failing test first, the smallest change at the point every caller shares, and no drive-by refactors
 - Opens PRs the way a technical writer would: a TL;DR body under 25 lines, the full breakdown as review comments
+- Gives every agent a context budget: search before reading, windows not files, one test not the suite, capped command output
 - Stops and asks before any edit that touches auth, crypto, billing or migrations, and before every push
 - Installs ponytail and caveman alongside, both at ultra by default, to shrink what the agents build and say
 
 ## How it works
 
-Every agent is a markdown file with a small frontmatter block: its tools, its model tier, and a prompt of under sixty lines. The orchestrator has no edit or execute tools at all, so it cannot do the work itself; it can only classify, delegate and relay. Subagents are stateless on both platforms, so each handoff carries the user's request, what has been learnt so far, the specialist's scope, and the report format to return.
+Every agent is a markdown file with a small frontmatter block: its tools, its model tier, and a prompt of under seventy lines. The orchestrator has no edit or execute tools at all, so it cannot do the work itself; it can only classify, delegate and relay. Subagents are stateless on both platforms, so each handoff carries the user's request, what has been learnt so far, the specialist's scope, and the report format to return.
 
 | Piece | Role |
 |---|---|

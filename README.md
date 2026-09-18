@@ -4,13 +4,14 @@
 
 An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
 
-The point is spending fewer tokens on bug work without losing quality. Five things do that:
+The point is spending fewer tokens on bug work without losing quality. Six things do that:
 
 1. **Right model per job.** Each agent declares a tier (cheap, balanced, strong) rather than a model. Reading a repo is cheap-tier work; root-causing is the one place the strong tier pays for itself.
 2. **Narrow, read-only specialists.** The investigator cannot edit and the orchestrator cannot run code, so each context window holds only what that job needs.
 3. **Summaries, not transcripts.** Every handoff is a fixed report (Diagnosis, Fix report). Nothing is re-verified downstream.
 4. **A persistent code map.** `docs/CODEMAP.md` is written once and refreshed by diff, so agents stop re-reading the repo every session.
-5. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
+5. **A context budget per agent.** Search before reading, read windows not files, run one test not the suite, cap command output, skip vendored trees. The orchestrator is the only long-lived context, so it reads almost nothing itself, holds only the latest reports, and suggests a fresh session per bug.
+6. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
 
 ```
 agents/

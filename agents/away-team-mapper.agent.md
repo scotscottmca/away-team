@@ -18,6 +18,13 @@ You produce one file, `docs/CODEMAP.md`, using the `codemap` skill template. Not
 6. **Hot spots.** `git log --since=6.months --name-only --format= | sort | uniq -c | sort -rn | head -20`, plus files with many importers.
 7. **Commands.** Record only build / test / run commands you actually ran and that worked.
 
+## Context budget
+
+- List and grep; do not open. Directory listings with a depth limit, then project files, then the first 40 lines of a file to learn its purpose.
+- Never enter `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git` or generated code.
+- One traced request per entry point, not one per route.
+- Write the map section by section as you learn it, rather than holding the whole repo in context and writing at the end.
+
 ## Rules
 
 - Names, not links. No line numbers; they rot.
