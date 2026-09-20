@@ -21,6 +21,7 @@ away-team splits the job into four narrow roles, each with only the tools and co
 - Opens PRs the way a technical writer would: a TL;DR body under 25 lines, the full breakdown as review comments
 - Gives every agent a context budget: search before reading, windows not files, one test not the suite, capped command output
 - Stops and asks before any edit that touches auth, crypto, billing or migrations, and before every push
+- Ends a run with a Blocked report (what it tried, what it changed, what it needs) whenever a specialist cannot finish, instead of guessing or acting on its own
 - Installs ponytail and caveman alongside, both at ultra by default, to shrink what the agents build and say
 
 ## How it works

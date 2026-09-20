@@ -15,6 +15,8 @@ const MODELS = {
   copilot: { cheap: 'gpt-5.6-luna', balanced: 'claude-sonnet-5', strong: 'claude-opus-5' },
   claude:  { cheap: 'haiku',        balanced: 'sonnet',          strong: 'opus' }, // strong: 'fable' if your plan has it
 };
+// Frontmatter keys only Claude Code understands; dropped from the Copilot render.
+const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode'];
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write', todo: 'TodoWrite', web: 'WebFetch, WebSearch' };
 const LEVELS = ['lite', 'full', 'ultra'];
 
@@ -29,6 +31,7 @@ function render(text, platform) {
   return text.split(/\r?\n/).map((line) => {
     let m;
     if ((m = line.match(/^model: (\w+)$/))) return `model: ${MODELS[platform][m[1]]}`;
+    if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) return null;
     if (platform === 'claude' && (m = line.match(/^tools: \[(.*)\]$/))) {
       const names = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
       return names.includes('*') ? null : `tools: ${names.map((n) => CLAUDE_TOOLS[n]).join(', ')}`;
