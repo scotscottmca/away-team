@@ -5,7 +5,7 @@
 //   --mcp <a,b>                                       extra MCP servers, on top of the ones found on this machine
 //   --no-mcp                                          skip MCP entirely (isolation, not cost: a tool name is ~11 tokens)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
-// Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
+// Agents carry a model tier (cheap | balanced | strong); models.js resolves it per platform, priority list first.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -13,10 +13,10 @@ const { spawnSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const pkg = require('../package.json');
-const MODELS = {
-  copilot: { cheap: 'gpt-5.6-luna', balanced: 'claude-sonnet-5', strong: 'claude-opus-5' },
-  claude:  { cheap: 'haiku',        balanced: 'sonnet',          strong: 'opus' }, // strong: 'fable' if your plan has it
-};
+const MODELS = require('./models.js');
+// First row in the tier's priority list that names this platform; a row missing a platform's key is skipped for
+// that platform only, so a plan-only model can be prepended (see models.js) without breaking the other platform.
+const resolveModel = (rows, platform) => rows.find((e) => e[platform])?.[platform];
 // Frontmatter keys only Claude Code understands; dropped from the Copilot render, with any indented block under them.
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
 // Frontmatter keys only Copilot understands; dropped from the Claude render.
@@ -120,8 +120,11 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
     if (dropping) { if (/^\s+\S/.test(line)) return null; dropping = false; }
     // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if ((m = line.match(/^model: (\w+)$/))) {
-      const model = MODELS[platform][m[1]];
-      if (!model) bad(`unknown model tier "${m[1]}": expected one of ${Object.keys(MODELS[platform]).join(', ')}`);
+      const tier = m[1];
+      const rows = MODELS[tier];
+      if (!rows) bad(`unknown model tier "${tier}": expected one of ${Object.keys(MODELS).join(', ')}`);
+      const model = resolveModel(rows, platform);
+      if (!model) bad(`model tier "${tier}" has no ${platform} alias`);
       return `model: ${model}`;
     }
     // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.

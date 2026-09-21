@@ -49,7 +49,7 @@ Agents declare a tier, not a model, so the same file runs on whatever each platf
 | balanced | orchestrator, basher, pr-writer | Claude Sonnet 5 | sonnet |
 | strong | investigator | Claude Opus 5 | opus |
 
-The mapping is one table in the installer. Claude's aliases resolve to the newest model of each tier on their own; the Copilot column is the cheapest model on the per-token price list that does the job.
+The mapping is an ordered priority list per tier in `bin/models.js`: the first row that names the platform wins, so a plan-only model is added by prepending a row rather than overwriting the default. Claude's aliases resolve to the newest model of each tier on their own; the Copilot column is the cheapest model on the per-token price list that does the job.
 
 ## One source, two platforms
 
