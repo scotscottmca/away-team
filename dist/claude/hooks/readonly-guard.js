@@ -4,8 +4,8 @@
 // `execute` is meant for orienting reads only, but `execute` renders to Bash, and Bash can write (`>`, `sed -i`,
 // `git commit`). This blocks write-shaped Bash outside the system temp directory, and write-shaped MCP tool calls:
 // the crew gets every MCP server the machine has, and a server that can read a work item can usually also create one.
-// One exception, on both paths: filing an issue is allowed, so a finding neither agent is here to fix reaches the
-// tracker instead of dying in a transcript. See FILE_ISSUE.
+// One exception, on both paths: filing an issue or a work item is allowed, so a finding neither agent is here to fix
+// reaches the tracker instead of dying in a transcript. See FILE_ISSUE.
 // Wired from each agent's own `hooks:` frontmatter on an npx install. Claude Code ignores frontmatter hooks on
 // plugin agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with one `--agent <name>` per
 // guarded agent: the guard then enforces only when the hook input's agent_type matches one of those (bare, or
@@ -72,9 +72,9 @@ const MCP_WRITE = /(^|_)(create|update|delete|remove|write|edit|put|post|patch|p
 // The one write these agents may make: filing an issue. A finding they are not here to fix has nowhere else to go —
 // the report template holds one line for it and the orchestrator only relays prose — so it dies in a transcript
 // unless it reaches the tracker, and creating an issue changes no code and no diagnosis. Narrow on purpose: creating
-// one only, never commenting on, editing, closing or linking one, and a multi-method tool must say `create`. Issues
-// only: a work item carries process state an agent has no business inventing, so `wit_create_work_item` stays denied.
-const FILE_ISSUE = /(^|_)(create_issue|issue_create|new_issue)(_|$)|^issue_write$/i;
+// one only — never commenting on, editing, closing or linking one — a multi-method tool must say `create`, and the
+// name must *end* there, so `create_work_item_comment` is not a create. Work items count: a tracker is a tracker.
+const FILE_ISSUE = /(^|_)(create|new)_(issue|work_item)$|(^|_)(issue|work_item)_create$|^issue_write$/i;
 // mcp__<server>__<tool> on Claude Code; a Copilot MCP tool arrives as <server>/<tool>.
 const mcpViolation = (name, input) => {
   const tool = name.startsWith('mcp__') ? name.split('__').slice(2).join('__') : name.split('/').slice(1).join('/');
