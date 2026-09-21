@@ -3,7 +3,7 @@
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
 //   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
 //   --mcp <a,b>                                       extra MCP servers, on top of the ones found on this machine
-//   --no-mcp                                          skip MCP entirely (smaller cold start; nothing but the built-ins)
+//   --no-mcp                                          skip MCP entirely (isolation, not cost: a tool name is ~11 tokens)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -49,7 +49,9 @@ const list = (name) => (opt(name) || '').split(',').map((s) => s.trim()).filter(
 // Every child gets a timeout and an empty stdin: a hung or stdin-reading install must not hang the installer.
 const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encoding: 'utf8', input: '', timeout, killSignal: 'SIGKILL' });
 // The whole crew gets every MCP server this machine has. A tool allowlist is deny-by-default, so a server has to be
-// named in it or the agent cannot see it — hence discovery rather than a fixed list. Both platforms ignore an entry
+// named in it or the agent cannot see it — hence discovery rather than a fixed list. Measured cost of that breadth:
+// only tool names reach a cold start, about 11 tokens each, and padding every description tenfold changed nothing,
+// so schemas are fetched on demand. See docs/cost.md; --no-mcp is for isolation, not for cost. Both platforms ignore an entry
 // for a server that is not configured, so every source here is best-effort and a false positive costs nothing.
 // The Azure DevOps server ships as a default under both names its own guide registers it as (`ado` on Copilot CLI,
 // `azure-devops` on Claude Code); it is also what dist/ is built with, since that is shared and cannot be discovered for.
