@@ -1,0 +1,21 @@
+# Runs the build-output test on every pull request, so a broken render is caught before it is merged
+# rather than when it blocks a publish. publish.yml keeps its own test step: that one gates npm publish.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The install tests run bin/away-team.js, which needs @clack/prompts and picocolors.
+      - run: npm ci
+      # Rebuilds dist/ and asserts over it, including that dist/ matches what is committed.
+      - run: npm test

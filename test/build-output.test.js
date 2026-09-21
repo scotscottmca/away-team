@@ -114,12 +114,16 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   assert.ok(!/^hooks:/m.test(fm), 'plugin investigator carries frontmatter hooks, which Claude Code ignores on plugin agents');
   assert.ok(/^disallowedTools: .*\bEdit\b/m.test(fm), 'plugin investigator does not disallow Edit');
   const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;
-  const cmd = hooks.PreToolUse.find((h) => h.matcher === 'Bash').hooks[0].command;
+  // The guard inspects Bash and every MCP tool: the crew now carries every MCP server the machine has.
+  const entry = hooks.PreToolUse.find((h) => /\bBash\b/.test(h.matcher));
+  assert.match(entry.matcher, /mcp__/, 'guard matcher does not cover MCP tools');
+  const cmd = entry.hooks[0].command;
   assert.strictEqual(cmd, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/readonly-guard.js" --agent away-team-investigator');
   const probe = (command, args = [], extra = {}) => {
     try { execFileSync('node', [guard, ...args], { input: JSON.stringify({ tool_input: { command }, ...extra }) }); return 0; }
     catch (e) { return e.status; }
   };
+  const probeTool = (tool_name) => probe('', [], { tool_name });
   for (const c of ['npm test', 'git log -S x', 'cat a.js > /tmp/b']) assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
   for (const c of ['echo x > src/a.js', "sed -i 's/a/b/' a.js", 'git commit -am x']) assert.strictEqual(probe(c), 2, `guard allowed "${c}"`);
   // Session-wide from hooks.json, the guard must bite only when the investigator (bare or plugin-scoped) is running.
@@ -130,6 +134,63 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   for (const t of ['away-team:away-team-basher', 'away-team-basher', undefined]) {
     assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 0, `scoped guard blocked agent_type ${t}`);
   }
+  // Reading through any MCP server is evidence; changing anything through one is the basher's job. Both spellings:
+  // mcp__<server>__<tool> on Claude Code, <server>/<tool> on Copilot.
+  for (const t of ['mcp__ado__wit_get_work_item', 'mcp__ado__wit_list_backlogs', 'mcp__github__get_pull_request_comments',
+    'mcp__jira__searchIssues', 'ado/wit_get_work_item']) {
+    assert.strictEqual(probeTool(t), 0, `guard blocked the read-only MCP tool ${t}`);
+  }
+  for (const t of ['mcp__ado__wit_create_work_item', 'mcp__ado__repo_update_pull_request', 'mcp__github__add_issue_comment',
+    'mcp__jira__deleteIssue', 'mcp__x__createOrUpdateFile', 'ado/repo_update_pull_request']) {
+    assert.strictEqual(probeTool(t), 2, `guard allowed the write-shaped MCP tool ${t}`);
+  }
+});
+
+test('an install gives the whole crew every MCP server the machine has', () => {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-discover-'));
+  const home = path.join(tmp, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  // Both shapes Claude Code stores servers in: user scope at the top level, local scope under the project.
+  fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({
+    mcpServers: { 'jira-user': { type: 'stdio', command: 'echo', args: ['hi'] } },
+    projects: { '/somewhere': { mcpServers: { 'pg-local': { type: 'stdio', command: 'echo', args: ['hi'] } } } },
+  }));
+  const install = (extra = []) => execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'),
+    '--yes', '--target', 'all', '--scope', 'global', '--skip-plugins', ...extra],
+    { cwd: tmp, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
+
+  install();
+  const agentsOf = (t, ext) => fs.readdirSync(path.join(home, t, 'agents'))
+    .map((f) => ({ name: f, tools: (fs.readFileSync(path.join(home, t, 'agents', f), 'utf8').match(/^tools: (.*)$/m) || [])[1] }));
+  for (const { name, tools } of agentsOf('.claude')) {
+    if (!tools) continue; // basher declares every tool, so it has no tools line and inherits MCP already
+    for (const w of ['mcp__jira-user__*', 'mcp__pg-local__*']) assert.ok(tools.includes(w), `claude/${name} lacks ${w}`);
+  }
+  for (const { name, tools } of agentsOf('.copilot')) {
+    if (!tools || tools === '["*"]') continue;
+    for (const w of ['"jira-user/*"', '"pg-local/*"']) assert.ok(tools.includes(w), `copilot/${name} lacks ${w}`);
+  }
+
+  install(['--no-mcp']);
+  const off = fs.readFileSync(path.join(home, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');
+  assert.ok(!/mcp__/.test(off.match(/^tools: (.*)$/m)[1]), '--no-mcp still granted MCP servers');
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('a build never bakes in the building machine\'s MCP servers', () => {
+  // dist/ is committed and shared with everyone who installs the plugin, so it carries the defaults and nothing local.
+  const home = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-buildhome-'));
+  fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({
+    mcpServers: { 'local-only-server': { type: 'stdio', command: 'echo', args: ['hi'] } } }));
+  execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--build'],
+    { cwd: ROOT, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
+  for (const a of [...agentFiles('copilot'), ...agentFiles('claude')]) {
+    assert.ok(!a.text.includes('local-only-server'), `${a.platform}/${a.name}: dist carries a local MCP server`);
+  }
+  // Same bytes as a clean build, which is the check the release workflow relies on.
+  const status = execFileSync('git', ['status', '--porcelain', '--', 'dist'], { cwd: ROOT, encoding: 'utf8' }).trim();
+  assert.strictEqual(status, '', `a build with local MCP config changed dist/:\n${status}`);
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 test('dist matches a fresh build', () => {

@@ -41,7 +41,8 @@ npx @scotscottmca/away-team --scope project          # into this repo: .github/ 
 npx @scotscottmca/away-team --yes                    # accept every default, no prompts
 npx @scotscottmca/away-team --skip-plugins
 npx @scotscottmca/away-team --level full             # ponytail + caveman default level (ultra)
-npx @scotscottmca/away-team --mcp azure-devops       # let the crew use these MCP servers (comma-separated)
+npx @scotscottmca/away-team --mcp jira,github        # extra MCP servers, on top of the ones found on this machine
+npx @scotscottmca/away-team --no-mcp                 # no MCP at all; smaller cold start
 npx github:scotscottmca/away-team                    # same, straight from GitHub
 ```
 
@@ -123,25 +124,32 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 3. Copilot's auto model selection gives a discount but ignores per-agent models; not used here.
 4. **The Claude desktop skill enforces less than the agent.** `/away-team` is the orchestrator's body as a skill, for the desktop app's lack of an agent picker. A skill can carry `model` and `disallowed-tools`, and the render sets both (the balanced tier; every tool the agent's allowlist leaves out), but they apply only to the turn that invokes the skill and clear on your next message, and a skill cannot restrict which subagents the Agent tool may spawn. After that first turn, "never edits code" is prose. For the enforced form on the desktop app, set `"agent": "away-team"` in the project's `.claude/settings.json` (table above): every session in that project then runs the orchestrator with its tool list and model.
 5. **The investigator's read-only guard is Claude Code only.** Per-agent `hooks:` and `disallowedTools` are Claude Code frontmatter; Copilot custom agents have neither, and the render drops both. On Copilot the investigator's tool list still excludes editing tools, but `execute` is a shell, so "never edits files" is prose the model is trusted to follow. Treat a Copilot investigation as advisory on that point. On Claude Code 2.1.278 the guard is checked live on all three install paths (plugin, global npx, project npx), as the main thread and as a spawned subagent, but each path wires it differently: the npx installs use the agent's `hooks:` frontmatter, which Claude Code ignores on plugin agents (it logs `sets hooks, which is ignored for plugin agents`), so the plugin registers the guard session-wide from `hooks/hooks.json` and the guard enforces only when the hook input's `agent_type` is the investigator. A project install additionally needs the repo folder trusted (see Install).
-6. **MCP servers have to be named per agent.** A server configured in your IDE or CLI is not automatically in a specialist's tool list, because each specialist carries an explicit allowlist. The Azure DevOps server (`@azure-devops/mcp`) is named by default; for anything else install with `--mcp <server>` (see below), or add the tool to an agent file by hand. Basher is unaffected: it has `tools: ["*"]` and inherits whatever the session has. Copilot ignores a tool name it does not recognise, silently: a bare server name in `tools:` grants nothing (checked live), the spelling is `<server>/*`.
+6. **MCP access is a snapshot of install time.** The installer reads the servers configured on the machine and names every one of them on every agent's allowlist. A server you add *afterwards* is not in those files, so re-run the installer (or pass `--mcp <name>`) to pick it up. Copilot ignores a tool name it does not recognise, silently: a misspelt server shows up only as the agent lacking the tools, so ask the agent to list them if in doubt.
+7. **The investigator can read through MCP but not write through it.** It gets every server the rest of the crew gets; the read-only guard additionally rejects any MCP tool whose name looks mutating (`create`, `update`, `delete`, `comment`, `post`…). That is a name heuristic, not a capability check — a read tool called `run_query` would be refused, and a mutating tool with an innocent name would not be. On Copilot there are no per-agent hooks, so none of it applies and read-only is prose there.
 7. **Copilot CLI does not honour the `search` alias.** The custom-agents reference lists `search` as the alias for the grep and glob tools, but an agent allowed `["read", "search", "execute"]` came up with `view` and `bash` and no search tool at all (checked live; `read` and `execute` mapped fine). The CLI's tools are named `grep` and `glob`, and Copilot ignores names it does not recognise, so the render writes all three: `"search", "grep", "glob"`. If a Copilot specialist seems to search only through bash, ask it to list its tools.
 8. **Plugin install: specialist names are scoped.** Claude Code registers a plugin's agents as `<plugin>:<name>`, and a bare name does not resolve for delegation (`Agent type 'away-team-mapper' not found`, checked against a live plugin load), so `dist/claude` renders the orchestrator's routing table and Agent allowlist as `away-team:away-team-mapper` and so on. The npx install keeps bare names. `claude --agent away-team` still finds the plugin's orchestrator by its bare name.
 
 ## MCP servers
 
-Each specialist has a fixed tool allowlist, which is the point — and it means a running MCP server is invisible to them until it is named.
+**The whole crew gets every MCP server you have, on both platforms, with no flag.** The installer reads the servers configured on the machine and names each one on every agent's tool list.
 
-The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named on every allowlist by default, under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). Register it under one of those names and the crew reaches it with no flag; registered under another name, pass that name with `--mcp`. An entry for a server that is not configured is ignored by both platforms, so the spare name costs nothing.
+It has to name them, because a tool allowlist is deny-by-default: an agent cannot use a server it does not list, and neither platform has a "all MCP servers" wildcard. So the installer discovers them, from `claude mcp list` and `copilot mcp list` where those CLIs are on PATH, and from the config files they write (`~/.claude.json`, including per-project servers, `~/.mcp.json`, `<repo>/.mcp.json`, `.vscode/mcp.json`, `~/.copilot/mcp-config.json`). Each source is best-effort and the union is used; a name for a server you do not have is ignored by both platforms, so a false positive costs nothing.
 
-For any other server, install with the names the crew should reach:
+Each discovered server is written in the platform's own spelling: `mcp__<server>__*` on Claude Code, `<server>/*` on Copilot. Basher needs no entry — it declares every tool and inherits whatever the session has.
 
 ```bash
-npx @scotscottmca/away-team --mcp github
+npx @scotscottmca/away-team                     # every server on this machine, no flag needed
+npx @scotscottmca/away-team --mcp jira,github   # plus these, for a server discovery missed
+npx @scotscottmca/away-team --no-mcp            # none; a smaller cold start
 ```
 
-That adds the server to the `tools:` list of every agent that has one: `mcp__github__*` on Claude Code, `github/*` on Copilot. To grant one tool rather than a whole server, pass the Claude spelling and the installer translates it: `--mcp mcp__github__get_issue` renders `mcp__github__get_issue` on Claude Code and `github/get_issue` on Copilot. Or edit the installed agent file and add the entry to `tools:` yourself in the platform's spelling.
+The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named by default whether or not it is discovered, under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example).
 
-The server itself is configured where your CLI or IDE already configures MCP servers; away-team does not manage that, it only grants the agents access to what you have configured. Use the server's name as your CLI or IDE shows it (Copilot CLI: `/mcp show`). Both spellings are from the platform documentation, `mcp__<server>__*` from the Claude Code subagent reference and `<server>/*` and `<server>/<tool>` from the Copilot custom-agents reference, and the Copilot one is checked live: `--mcp github-mcp-server` put that server's tools in the investigator's list, the bare name put none. Copilot ignores any tool name it does not recognise without a warning, so a misspelt server shows up only as the agent lacking the tools; ask the agent to list its tools to check.
+To grant one tool rather than a whole server, pass the Claude spelling and the installer translates it: `--mcp mcp__github__get_issue` renders `mcp__github__get_issue` on Claude Code and `github/get_issue` on Copilot. Or edit the installed agent file and add the entry to `tools:` yourself in the platform's spelling.
+
+The investigator is the one exception, and only on Claude Code: it reads through every server like the rest of the crew, but the read-only guard rejects an MCP call whose tool name looks mutating, the same way it rejects write-shaped Bash. Reading a work item to root-cause a bug is evidence; creating one is the basher's job.
+
+The servers themselves are configured where your CLI or IDE already configures them; away-team does not manage that, it only grants the agents access to what you have. If you name one by hand, use the name your CLI or IDE shows (Copilot CLI: `/mcp show`; Claude Code: `claude mcp list`). Both spellings are from the platform documentation, `mcp__<server>__*` from the Claude Code subagent reference and `<server>/*` and `<server>/<tool>` from the Copilot custom-agents reference, and the Copilot one is checked live: `--mcp github-mcp-server` put that server's tools in the investigator's list, the bare name put none. Copilot ignores any tool name it does not recognise without a warning, so a misspelt server shows up only as the agent lacking the tools; ask the agent to list its tools to check.
 
 ## Why it is built this way
 
@@ -160,7 +168,7 @@ Edit `agents/`, `skills/` and `hooks/` only; `dist/` is generated on release. Ru
 
 ## Release
 
-A push to `main` that touches `agents/`, `skills/`, `bin/`, `hooks/` or `package.json` is a release. `npm test` runs before publish, so a broken render never reaches npm. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm. Doc-only pushes (README, `docs/`, LICENSE, workflow) do not release; the README ships with the next code release. Pull after a releasing push to pick up the version commit.
+`.github/workflows/ci.yml` runs `npm test` on every pull request, so a broken render is caught before it is merged. A push to `main` that touches `agents/`, `skills/`, `bin/`, `hooks/` or `package.json` is a release, and `npm test` runs again there before publish, so a broken render never reaches npm either. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm. Doc-only pushes (README, `docs/`, LICENSE, workflow) do not release; the README ships with the next code release. Pull after a releasing push to pick up the version commit.
 
 For a minor or major bump, run `npm version minor` (or `major`) locally and push; the workflow sees that version is not on npm yet and publishes it as is.
 

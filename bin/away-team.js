@@ -2,8 +2,8 @@
 // away-team installer.
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
 //   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
-//   --mcp <a,b>                                       give every agent with a tool allowlist access to these MCP servers
-//                                                     (the Azure DevOps server, @azure-devops/mcp, is always included)
+//   --mcp <a,b>                                       extra MCP servers, on top of the ones found on this machine
+//   --no-mcp                                          skip MCP entirely (smaller cold start; nothing but the built-ins)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -26,6 +26,9 @@ const COPILOT_ONLY_KEYS = ['disable-model-invocation'];
 // Claude Code exports CLAUDE_PROJECT_DIR (session root) and CLAUDE_PLUGIN_ROOT (plugin directory) to hook commands.
 const ROOT_VAR = '${AWAY_TEAM_ROOT}';
 const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
+// Tools the investigator's read-only guard inspects: Bash, and every MCP tool, since the crew now gets every
+// MCP server the machine has and a server that reads a work item can usually also create one.
+const GUARD_MATCHER = 'Bash|mcp__.*';
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
 const COPILOT_ONLY_DROP = ['ask'];
@@ -45,12 +48,37 @@ const home = (...p) => path.join(os.homedir(), ...p);
 const list = (name) => (opt(name) || '').split(',').map((s) => s.trim()).filter(Boolean);
 // Every child gets a timeout and an empty stdin: a hung or stdin-reading install must not hang the installer.
 const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encoding: 'utf8', input: '', timeout, killSignal: 'SIGKILL' });
-// MCP servers to expose to every agent that carries a tool allowlist (--mcp github,mcp__jira__get_issue).
-// The Azure DevOps server (@azure-devops/mcp) is always in, under the names its own guide registers it as:
-// `ado` for Copilot CLI, `azure-devops` for Claude Code. Both platforms ignore an entry for a server that is not
-// configured, so the extra name costs nothing where it does not apply.
+// The whole crew gets every MCP server this machine has. A tool allowlist is deny-by-default, so a server has to be
+// named in it or the agent cannot see it — hence discovery rather than a fixed list. Both platforms ignore an entry
+// for a server that is not configured, so every source here is best-effort and a false positive costs nothing.
+// The Azure DevOps server ships as a default under both names its own guide registers it as (`ado` on Copilot CLI,
+// `azure-devops` on Claude Code); it is also what dist/ is built with, since that is shared and cannot be discovered for.
 const DEFAULT_MCP = ['ado', 'azure-devops'];
-const mcp = [...new Set([...DEFAULT_MCP, ...list('--mcp')])];
+// Server names out of a `<cli> mcp list` table or a JSON config: keys of mcpServers / servers / mcp, at any depth
+// that the known config shapes use.
+const jsonServers = (file) => {
+  try {
+    const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const pick = (o) => (o && typeof o === 'object' ? Object.keys(o.mcpServers || o.servers || o.mcp || {}) : []);
+    return [...pick(d), ...Object.values(d.projects || {}).flatMap(pick)];
+  } catch { return []; }
+};
+// `<cli> mcp list` prints one server per line; take the leading identifier off each, ignoring headers and bullets.
+const cliServers = (cli) => {
+  if (!has(cli)) return [];
+  const r = run(`${cli} mcp list`, 15000);
+  if (r.status !== 0) return [];
+  return (r.stdout || '').split(/\r?\n/)
+    .map((l) => l.replace(/^[\s\-*•|]+/, '').match(/^([A-Za-z0-9_][\w.-]*)\s*[::|-]/))
+    .filter(Boolean).map((m) => m[1])
+    .filter((n) => !/^(name|server|servers|status|command|type|scope|tools|url)$/i.test(n));
+};
+function discoverMcp() {
+  const files = [home('.claude.json'), home('.claude', 'settings.json'), home('.mcp.json'),
+    home('.copilot', 'mcp-config.json'), home('.config', 'github-copilot', 'mcp.json'),
+    ...(repoRoot ? [path.join(repoRoot, '.mcp.json'), path.join(repoRoot, '.vscode', 'mcp.json')] : [])];
+  return [...new Set([...files.flatMap(jsonServers), ...cliServers('claude'), ...cliServers('copilot')])];
+}
 // Root of the git repo we are running in, if any: enables project scope.
 const repoRoot = (() => { const r = run('git rev-parse --show-toplevel', 10000); return r.status === 0 ? r.stdout.trim() : null; })();
 
@@ -80,7 +108,7 @@ const mcpTool = (e, platform) => {
 
 // plugin: true renders for the Claude plugin (dist/claude), where delegation targets take the plugin prefix.
 // root is substituted for ${AWAY_TEAM_ROOT}: the plugin's own root for a plugin build, the install directory otherwise.
-function render(text, platform, { plugin = false, root = '.', file = 'agent' } = {}) {
+function render(text, platform, { plugin = false, root = '.', file = 'agent', mcp = [] } = {}) {
   const scope = (n) => (plugin ? `${PLUGIN}:${n}` : n);
   const bad = (msg) => { throw new Error(`${file}: ${msg}`); };
   // A Claude-only key may open an indented block (hooks:); drop the whole block for Copilot.
@@ -138,7 +166,7 @@ function emit(platform, dest, opts = {}) {
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
   // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
   if (opts.plugin) {
-    const hooks = { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
+    const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
     fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), JSON.stringify({ hooks }, null, 2) + '\n');
   }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
@@ -227,6 +255,10 @@ const PLUGINS = {
   },
 };
 
+// dist/ is committed and shared, so it carries only the defaults; an install adds what this machine actually has.
+const mcpFor = (built) => (flag('--no-mcp') ? [] : built ? DEFAULT_MCP
+  : [...new Set([...DEFAULT_MCP, ...discoverMcp(), ...list('--mcp')])]);
+
 if (flag('--build')) {
   const dist = path.join(ROOT, 'dist');
   fs.rmSync(dist, { recursive: true, force: true });
@@ -234,9 +266,9 @@ if (flag('--build')) {
     name: PLUGIN, version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
-  emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}' });
+  emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
   fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2) + '\n');
-  emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}' });
+  emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
   fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
   fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), JSON.stringify(meta, null, 2) + '\n');
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
@@ -327,6 +359,12 @@ const BANNER = `
     }));
   }
 
+  // MCP: the whole crew gets every server this machine has, since a tool allowlist cannot see one it does not name.
+  const mcp = mcpFor(false);
+  const found_mcp = mcp.filter((n) => !DEFAULT_MCP.includes(n));
+  if (mcp.length) p.log.step(`MCP servers → every agent: ${c.cyan(mcp.join(', '))}${found_mcp.length ? '' : c.dim(' (defaults only; none found on this machine)')}`);
+  else p.log.step(c.dim('MCP: skipped (--no-mcp)'));
+
   // Summary
   const rows = [];
   for (const t of targets) {
@@ -349,7 +387,7 @@ const BANNER = `
   for (const t of targets) {
     const dest = destFor(t);
     // Absolute for a global install, portable for a project install: teammates check the repo out elsewhere.
-    emit(t, dest, { root: scope === 'project' ? '${CLAUDE_PROJECT_DIR}/.claude' : dest });
+    emit(t, dest, { root: scope === 'project' ? '${CLAUDE_PROJECT_DIR}/.claude' : dest, mcp });
     p.log.success(`${t === 'copilot' ? 'GitHub Copilot' : 'Claude Code'}: agents and skills → ${dest}`);
     if (t === 'copilot' && companions.includes('caveman')) setInstructionLine(home('.copilot', 'copilot-instructions.md'), level);
 
