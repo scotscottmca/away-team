@@ -28,6 +28,10 @@ const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
 const COPILOT_ONLY_DROP = ['ask'];
+// Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
+// ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
+// Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
+const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'] };
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
@@ -96,7 +100,8 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent' } =
       const extra = entries.some(([a]) => a === '*') ? [] : mcp.map((e) => mcpTool(e, platform));
       // Copilot has no agent allowlist syntax and ignores unknown tool names: bare aliases only.
       if (platform === 'copilot') {
-        const names = entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a)).map(([a]) => (a.startsWith('mcp__') ? mcpTool(a, 'copilot') : a));
+        const names = entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a))
+          .flatMap(([a]) => (a.startsWith('mcp__') ? [mcpTool(a, 'copilot')] : COPILOT_TOOLS[a] || [a]));
         return `tools: [${[...new Set([...names, ...extra])].map((a) => JSON.stringify(a)).join(', ')}]`;
       }
       if (entries.some(([a]) => a === '*')) return null;

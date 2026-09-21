@@ -55,6 +55,16 @@ test('no Claude-only key reaches the Copilot render', () => {
   }
 });
 
+test('the Copilot render names the CLI search tools', () => {
+  // Copilot CLI did not map the `search` alias to anything (checked live), so every agent that searches must also
+  // name grep and glob, or it searches through bash only.
+  for (const a of agentFiles('copilot')) {
+    const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
+    if (!m || !m[1].includes('"search"')) continue;
+    assert.ok(m[1].includes('"grep"') && m[1].includes('"glob"'), `copilot/${a.name}: search without grep and glob`);
+  }
+});
+
 test('every model is a real model for its platform', () => {
   for (const a of all) {
     const m = frontmatter(a.text).match(/^model: (.*)$/m);
@@ -156,7 +166,7 @@ test('--mcp spells the server the way each platform reads it', () => {
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
-    '["read", "search", "execute", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "azure-devops/*", "github/get_issue"]');
   // Basher inherits every tool and gets no entry.
   assert.ok(!fs.readFileSync(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md'), 'utf8').includes('azure-devops'));
   fs.rmSync(tmp, { recursive: true, force: true });
