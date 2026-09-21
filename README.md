@@ -8,9 +8,9 @@ The point is spending fewer tokens on bug work without losing quality. Six thing
 
 1. **Right model per job.** Each agent declares a tier (cheap, balanced, strong) rather than a model. Reading a repo is cheap-tier work; root-causing is the one place the strong tier pays for itself.
 2. **Narrow, read-only specialists.** The investigator cannot edit and the orchestrator cannot run code, so each context window holds only what that job needs.
-3. **Small reports, never retyped.** Output costs about five times input. Each specialist returns one fixed report of a few hundred tokens. The orchestrator shows you four lines of it, forwards it verbatim once to the one specialist that needs it, and gives you the full text only if you ask. Nothing is re-verified downstream.
+3. **Small reports, never retyped.** Output costs about five times input. Each specialist returns one fixed report of a few hundred tokens, or a `## Blocked` block (stage, reason, what it tried, side effects, next cheapest step, what it needs) when it cannot finish. The orchestrator shows you four lines of it, forwards it verbatim once to the one specialist that needs it, and gives you the full text only if you ask. Nothing is re-verified downstream, and nobody improvises when stuck: blocked means nothing was changed.
 4. **A persistent code map.** `docs/CODEMAP.md` is written once and refreshed by diff, so agents stop re-reading the repo every session.
-5. **A context budget per agent.** Batch tool calls, since every turn re-reads the agent's whole context. Search before reading, read windows not files, run one test not the suite, cap command output, skip vendored trees. The orchestrator is the only long-lived context, so it reads almost nothing itself, holds only the latest reports, and suggests a fresh session per bug.
+5. **A context budget per agent.** Batch tool calls, since every turn re-reads the agent's whole context. Search before reading, read windows not files, run one test not the suite, cap command output, skip vendored trees. On Claude Code each specialist also carries a `maxTurns` cap, so a runaway investigation returns partial output instead of burning the window. The orchestrator is the only long-lived context, so it reads almost nothing itself, holds only the latest reports, and suggests a fresh session per bug.
 6. **Ponytail and caveman.** Optional companions that shrink what the agent builds and what it says.
 
 ```
@@ -84,7 +84,7 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
 
-Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing.
+Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself.
 
 Ponytail and caveman both default to **ultra**. Change the default with `npx @scotscottmca/away-team --level lite|full|ultra` (it writes each plugin's `config.json`, and a line in `~/.copilot/copilot-instructions.md` because caveman has no hooks on Copilot). Change it for one session with `/ponytail full` (Copilot namespaces it `/ponytail:ponytail`) or `/caveman full`.
 
@@ -126,7 +126,7 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 - **Investigator never edits.** Read-only tools make "diagnose, don't patch the symptom" a hard constraint. Three falsified hypotheses is the stop rule (superpowers `systematic-debugging`).
 - **CODEMAP.md is the memory.** Persistent, committed, refreshed by diff against its own `commit:` header. Names not links, invariants not file lists (matklad's ARCHITECTURE.md guidance). Basher updates it when a fix moves a boundary.
 - **PR body is the TL;DR.** Line-level reasoning goes in one review via the REST API (`gh pr comment` cannot do inline), narrative in one top-level comment.
-- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ. The installer rewrites those two lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.
+- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ, and Claude-only keys such as `maxTurns` are dropped for Copilot. The installer rewrites those lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.
 
 ## Contributing
 
