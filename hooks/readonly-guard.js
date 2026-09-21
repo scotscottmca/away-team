@@ -2,9 +2,15 @@
 // PreToolUse hook for away-team-investigator: makes "read-only" an enforced constraint, not a convention.
 // The investigator's tool list already excludes Edit/Write, but `execute` renders to Bash, and Bash can write
 // (`>`, `sed -i`, `git commit`). This blocks write-shaped Bash outside the system temp directory.
-// Wired from the agent's `hooks:` frontmatter; exits 2 with a reason on stderr to deny the call.
+// Wired from the agent's `hooks:` frontmatter on an npx install. Claude Code ignores frontmatter hooks on plugin
+// agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with `--agent <name>`: the guard then
+// enforces only when the hook input's agent_type is that agent (bare, or <plugin>:<name>) and exits 0 otherwise.
+// Exits 2 with a reason on stderr to deny the call.
 const os = require('os');
 const path = require('path');
+
+const ONLY_AGENT = process.argv.includes('--agent') ? process.argv[process.argv.indexOf('--agent') + 1] : null;
+const isOnlyAgent = (t) => !!t && (t === ONLY_AGENT || t.endsWith(`:${ONLY_AGENT}`));
 
 const TMP = [os.tmpdir(), '/tmp', '/var/tmp', process.env.TMPDIR, process.env.TEMP, process.env.TMP]
   .filter(Boolean).map((d) => path.resolve(d));
@@ -59,7 +65,11 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
   let command = '';
-  try { command = (JSON.parse(input || '{}').tool_input || {}).command || ''; } catch { process.exit(0); }
+  try {
+    const hook = JSON.parse(input || '{}');
+    if (ONLY_AGENT && !isOnlyAgent(hook.agent_type)) process.exit(0);
+    command = (hook.tool_input || {}).command || '';
+  } catch { process.exit(0); }
   const why = command && violation(command);
   if (!why) process.exit(0);
   process.stderr.write(

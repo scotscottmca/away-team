@@ -85,17 +85,31 @@ test('the Claude desktop skill body is the orchestrator body', () => {
   assert.strictEqual(skill.split(/^---\r?\n/m)[2].trim(), agent.split(/^---\r?\n/m)[2].trim());
 });
 
-test('the investigator ships its read-only guard, and the guard blocks writes', () => {
+test('the plugin wires the read-only guard from hooks.json, and the guard blocks writes', () => {
   const guard = dist('claude', 'hooks', 'readonly-guard.js');
   assert.ok(fs.existsSync(guard), 'dist/claude/hooks/readonly-guard.js is missing');
+  // Claude Code ignores frontmatter hooks on plugin agents (it logs a warning and runs nothing), so the plugin must
+  // not carry them; it registers the guard from hooks/hooks.json, scoped to the investigator by agent name.
   const fm = frontmatter(fs.readFileSync(dist('claude', 'agents', 'away-team-investigator.md'), 'utf8'));
-  assert.ok(fm.includes('readonly-guard.js'), 'investigator does not wire the guard');
-  const probe = (command) => {
-    try { execFileSync('node', [guard], { input: JSON.stringify({ tool_input: { command } }) }); return 0; }
+  assert.ok(!/^hooks:/m.test(fm), 'plugin investigator carries frontmatter hooks, which Claude Code ignores on plugin agents');
+  assert.ok(/^disallowedTools: .*\bEdit\b/m.test(fm), 'plugin investigator does not disallow Edit');
+  const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;
+  const cmd = hooks.PreToolUse.find((h) => h.matcher === 'Bash').hooks[0].command;
+  assert.strictEqual(cmd, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/readonly-guard.js" --agent away-team-investigator');
+  const probe = (command, args = [], extra = {}) => {
+    try { execFileSync('node', [guard, ...args], { input: JSON.stringify({ tool_input: { command }, ...extra }) }); return 0; }
     catch (e) { return e.status; }
   };
   for (const c of ['npm test', 'git log -S x', 'cat a.js > /tmp/b']) assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
   for (const c of ['echo x > src/a.js', "sed -i 's/a/b/' a.js", 'git commit -am x']) assert.strictEqual(probe(c), 2, `guard allowed "${c}"`);
+  // Session-wide from hooks.json, the guard must bite only when the investigator (bare or plugin-scoped) is running.
+  const scoped = ['--agent', 'away-team-investigator'];
+  for (const t of ['away-team-investigator', 'away-team:away-team-investigator']) {
+    assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 2, `scoped guard allowed the investigator (${t})`);
+  }
+  for (const t of ['away-team:away-team-basher', 'away-team-basher', undefined]) {
+    assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 0, `scoped guard blocked agent_type ${t}`);
+  }
 });
 
 test('dist matches a fresh build', () => {
@@ -119,6 +133,8 @@ test('an install writes a hook path that resolves on the target machine', () => 
   // A project install is committed and shared, so the path must resolve at runtime on any checkout.
   assert.match(project, /command: 'node "\$\{CLAUDE_PROJECT_DIR\}\/\.claude\/hooks\/readonly-guard\.js"'/);
   assert.ok(fs.existsSync(path.join(repo, '.claude', 'hooks', 'readonly-guard.js')), 'project install ships no guard');
+  // Frontmatter hooks are honoured on .claude/agents and ~/.claude/agents; only the plugin needs hooks.json.
+  assert.ok(!fs.existsSync(path.join(repo, '.claude', 'hooks', 'hooks.json')), 'project install ships the plugin-only hooks.json');
 
   install(['--scope', 'global'], tmp);
   const global = fs.readFileSync(path.join(home, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');

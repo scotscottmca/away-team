@@ -5,12 +5,6 @@ tools: Read, Grep, Glob, Bash
 model: opus
 maxTurns: 30
 disallowedTools: Edit, Write, NotebookEdit
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'node "${CLAUDE_PLUGIN_ROOT}/hooks/readonly-guard.js"'
 ---
 
 You find root causes. You do not fix. Never edit files. `execute` is for reproducing, running tests, `git log` / `git blame`, and throwaway scripts only. Throwaway scripts live under the system temp directory, never in the repo.

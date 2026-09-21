@@ -31,6 +31,7 @@ const COPILOT_ONLY_DROP = ['ask'];
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
+const INVESTIGATOR = 'away-team-investigator'; // the read-only specialist hooks/readonly-guard.js is scoped to
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -100,6 +101,8 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent' } =
       return `tools: ${[...new Set([...names, ...extra])].join(', ')}`;
     }
     if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) { dropping = line.trim().endsWith(':'); return null; }
+    // Claude Code ignores (and warns about) frontmatter hooks on plugin agents; the plugin wires them from hooks/hooks.json.
+    if (plugin && line.startsWith('hooks:')) { dropping = true; return null; }
     if (platform === 'claude' && COPILOT_ONLY_KEYS.some((k) => line.startsWith(`${k}:`))) return null;
     if (line.includes(ROOT_VAR)) line = line.split(ROOT_VAR).join(root);
     if (plugin && SPECIALIST && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
@@ -117,6 +120,12 @@ function emit(platform, dest, opts = {}) {
   fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
   // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
   if (platform === 'claude') fs.cpSync(path.join(ROOT, 'hooks'), path.join(dest, 'hooks'), { recursive: true });
+  // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
+  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
+  if (opts.plugin) {
+    const hooks = { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
+    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), JSON.stringify({ hooks }, null, 2) + '\n');
+  }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
     // that invokes it, so it removes every tool the orchestrator's allowlist leaves out; the rest is prose.
