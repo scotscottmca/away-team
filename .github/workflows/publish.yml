@@ -25,6 +25,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # The installer needs its dependencies: npm test spawns it to check what an install writes.
+      - run: npm ci
       - name: Bump version if this one is already tagged
         # Tags are the source of truth: the registry's read cache can lag a publish by minutes.
         run: |
