@@ -26,7 +26,7 @@ away-team splits the job into four narrow roles, each with only the tools and co
 
 ## How it works
 
-Every agent is a markdown file with a small frontmatter block: its tools, its model tier, and a prompt of under seventy lines. The orchestrator has no edit or execute tools at all, so it cannot do the work itself; it can only classify, delegate and relay. Subagents are stateless on both platforms, so each handoff carries the user's request, what has been learnt so far, the specialist's scope, and the report format to return.
+Every agent is a markdown file with a small frontmatter block: its tools, its model tier, and a prompt of under seventy lines. The orchestrator has no edit tools at all, and its Bash is read-only, enforced by the same hook as the investigator's, so it cannot do the work itself; it can only classify, delegate and relay. Subagents are stateless on both platforms, so each handoff carries the user's request, what has been learnt so far, the specialist's scope, and the report format to return.
 
 | Piece | Role |
 |---|---|
