@@ -65,6 +65,16 @@ test('the Copilot render names the CLI search tools', () => {
   }
 });
 
+test('every allowlisted agent can reach the Azure DevOps MCP server by default', () => {
+  // @azure-devops/mcp registers as `ado` (Copilot CLI guide) or `azure-devops` (Claude Code guide); both are in.
+  for (const a of all) {
+    const m = frontmatter(a.text).match(/^tools: (.*)$/m);
+    if (!m || m[1] === '["*"]') continue; // basher inherits everything
+    const want = a.platform === 'claude' ? ['mcp__ado__*', 'mcp__azure-devops__*'] : ['"ado/*"', '"azure-devops/*"'];
+    for (const w of want) assert.ok(m[1].includes(w), `${a.platform}/${a.name}: tools lack ${w}`);
+  }
+});
+
 test('every model is a real model for its platform', () => {
   for (const a of all) {
     const m = frontmatter(a.text).match(/^model: (.*)$/m);
@@ -162,11 +172,11 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__azure-devops__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__get_issue');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/get_issue"]');
   // Basher inherits every tool and gets no entry.
   assert.ok(!fs.readFileSync(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md'), 'utf8').includes('azure-devops'));
   fs.rmSync(tmp, { recursive: true, force: true });

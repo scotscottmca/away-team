@@ -3,6 +3,7 @@
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
 //   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
 //   --mcp <a,b>                                       give every agent with a tool allowlist access to these MCP servers
+//                                                     (the Azure DevOps server, @azure-devops/mcp, is always included)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -44,8 +45,12 @@ const home = (...p) => path.join(os.homedir(), ...p);
 const list = (name) => (opt(name) || '').split(',').map((s) => s.trim()).filter(Boolean);
 // Every child gets a timeout and an empty stdin: a hung or stdin-reading install must not hang the installer.
 const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encoding: 'utf8', input: '', timeout, killSignal: 'SIGKILL' });
-// MCP servers to expose to every agent that carries a tool allowlist (--mcp azure-devops,github).
-const mcp = list('--mcp');
+// MCP servers to expose to every agent that carries a tool allowlist (--mcp github,mcp__jira__get_issue).
+// The Azure DevOps server (@azure-devops/mcp) is always in, under the names its own guide registers it as:
+// `ado` for Copilot CLI, `azure-devops` for Claude Code. Both platforms ignore an entry for a server that is not
+// configured, so the extra name costs nothing where it does not apply.
+const DEFAULT_MCP = ['ado', 'azure-devops'];
+const mcp = [...new Set([...DEFAULT_MCP, ...list('--mcp')])];
 // Root of the git repo we are running in, if any: enables project scope.
 const repoRoot = (() => { const r = run('git rev-parse --show-toplevel', 10000); return r.status === 0 ? r.stdout.trim() : null; })();
 
