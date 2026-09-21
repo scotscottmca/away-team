@@ -2,9 +2,9 @@
 // Run by `npm test`, which builds first; publish.yml runs it before `npm publish`.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const { execFileSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const MODELS = {
@@ -60,7 +60,7 @@ test('the Copilot render names the CLI search tools', () => {
   // name grep and glob, or it searches through bash only.
   for (const a of agentFiles('copilot')) {
     const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
-    if (!m || !m[1].includes('"search"')) continue;
+    if (!m?.[1].includes('"search"')) continue;
     assert.ok(m[1].includes('"grep"') && m[1].includes('"glob"'), `copilot/${a.name}: search without grep and glob`);
   }
 });
@@ -147,7 +147,7 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
 });
 
 test('an install gives the whole crew every MCP server the machine has', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-discover-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-discover-'));
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home, { recursive: true });
   // Both shapes Claude Code stores servers in: user scope at the top level, local scope under the project.
@@ -160,7 +160,7 @@ test('an install gives the whole crew every MCP server the machine has', () => {
     { cwd: tmp, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
 
   install();
-  const agentsOf = (t, ext) => fs.readdirSync(path.join(home, t, 'agents'))
+  const agentsOf = (t, _ext) => fs.readdirSync(path.join(home, t, 'agents'))
     .map((f) => ({ name: f, tools: (fs.readFileSync(path.join(home, t, 'agents', f), 'utf8').match(/^tools: (.*)$/m) || [])[1] }));
   for (const { name, tools } of agentsOf('.claude')) {
     assert.ok(tools, `claude/${name} has no tools line, so it inherits every tool`);
@@ -179,7 +179,7 @@ test('an install gives the whole crew every MCP server the machine has', () => {
 
 test('a build never bakes in the building machine\'s MCP servers', () => {
   // dist/ is committed and shared with everyone who installs the plugin, so it carries the defaults and nothing local.
-  const home = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-buildhome-'));
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-buildhome-'));
   fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({
     mcpServers: { 'local-only-server': { type: 'stdio', command: 'echo', args: ['hi'] } } }));
   execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--build'],
@@ -199,7 +199,7 @@ test('dist matches a fresh build', () => {
 });
 
 test('an install writes a hook path that resolves on the target machine', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-'));
   const home = path.join(tmp, 'home');
   const repo = path.join(tmp, 'repo');
   fs.mkdirSync(home, { recursive: true });
@@ -225,7 +225,7 @@ test('an install writes a hook path that resolves on the target machine', () => 
 });
 
 test('--mcp spells the server the way each platform reads it', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-mcp-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-mcp-'));
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home, { recursive: true });
   execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--yes', '--target', 'all', '--scope', 'global', '--skip-plugins',
@@ -269,5 +269,155 @@ test('each specialist names its own turn cap, so the prose cannot drift from the
     if (!cap) continue; // the orchestrator is the main thread and carries no cap
     assert.ok(a.text.includes(`${cap} turns`),
       `claude/${a.name}: maxTurns is ${cap} but the body never says "${cap} turns"`);
+  }
+});
+
+// --- Gates around the build itself, rather than its output. ---
+
+// Runs a build from a throwaway copy of the repo, so a deliberately broken agent never touches the real
+// tree. `--build` exits before the installer requires @clack/prompts, so the copy needs no node_modules.
+const buildCopy = (mutate) => {
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-build-'));
+  for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
+  mutate(tmp);
+  try {
+    execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' });
+    return { code: 0, output: '' };
+  } catch (e) {
+    return { code: e.status, output: `${e.stderr}${e.stdout}` };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+};
+// Swaps one exact string in one agent, asserting the fixture still matches so a reworded agent fails
+// here with "fixture drift" rather than silently testing nothing.
+const breakAgent = (file, from, to) => (tmp) => {
+  const p = path.join(tmp, 'agents', file);
+  const text = fs.readFileSync(p, 'utf8');
+  assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in ${file}`);
+  fs.writeFileSync(p, text.replace(from, to));
+};
+
+test('the build rejects bad input instead of rendering it', () => {
+  // Sanity first: an unmutated copy builds, so a failure below is the mutation and not the harness.
+  assert.strictEqual(buildCopy(() => {}).code, 0, 'an unmutated copy of the repo failed to build');
+
+  const INV = 'away-team-investigator.agent.md';
+  const TOOLS = '"read", "search", "execute"';
+  for (const [name, mutate, expected] of [
+    ['unknown model tier', breakAgent(INV, 'model: strong', 'model: bogus'), /unknown model tier "bogus"/],
+    ['unknown tool alias', breakAgent(INV, TOOLS, '"read", "telepathy", "execute"'), /unknown tool alias "telepathy"/],
+    ['malformed tools entry', breakAgent(INV, TOOLS, '"read(", "execute"'), /bad tools entry "read\("/],
+  ]) {
+    const { code, output } = buildCopy(mutate);
+    assert.notStrictEqual(code, 0, `${name}: the build succeeded instead of failing`);
+    assert.match(output, expected, `${name}: the build failed without naming the cause`);
+  }
+});
+
+test('the web session hook parses, stays silent off the remote, and is wired to a real file', () => {
+  const hook = path.join(ROOT, '.claude', 'hooks', 'session-start.sh');
+  assert.ok(fs.existsSync(hook), '.claude/hooks/session-start.sh is missing');
+  assert.ok(fs.statSync(hook).mode & 0o111, 'session-start.sh is not executable, so the hook never runs');
+  // Parse without executing: a syntax error here breaks every web session, and nothing else would catch it.
+  execFileSync('bash', ['-n', hook], { stdio: 'pipe' });
+  // Off the remote it must do nothing: a local machine has its own global install.
+  assert.strictEqual(execFileSync('bash', [hook], { encoding: 'utf8', stdio: 'pipe',
+    env: { ...process.env, CLAUDE_CODE_REMOTE: '' } }), '', 'the hook is not a no-op outside a remote session');
+
+  // That early exit is trivially silent, so drive the real path too. Stubs on PATH shout on both streams:
+  // anything the script does not route through its quiet() helper lands in the session's context, and a
+  // failure must still surface rather than being swallowed with it.
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-hook-'));
+  const stubs = path.join(tmp, 'stubs');
+  fs.mkdirSync(stubs);
+  // Per command, so each step is covered on its own: a stub that fails first would otherwise mask the ones after it.
+  const stub = (codes) => {
+    for (const [name, exit] of Object.entries(codes)) {
+      const f = path.join(stubs, name);
+      fs.writeFileSync(f, `#!/bin/sh\necho "stdout noise"\necho "stderr noise" >&2\nexit ${exit}\n`);
+      fs.chmodSync(f, 0o755);
+    }
+  };
+  const runHook = () => execFileSync('bash', [hook], { encoding: 'utf8', stdio: 'pipe',
+    env: { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: tmp, PATH: `${stubs}:${process.env.PATH}` } });
+
+  stub({ npm: 0, node: 0 });
+  assert.strictEqual(runHook(), '', 'the hook leaks command output into the session context');
+
+  // Every step must surface its own failure, not just the first one to run.
+  for (const codes of [{ npm: 1, node: 0 }, { npm: 0, node: 1 }]) {
+    stub(codes);
+    assert.throws(runHook, (e) => e.status !== 0 && /failed/.test(`${e.stderr}`),
+      `the hook swallows a failing step (${JSON.stringify(codes)})`);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+
+  const settings = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude', 'settings.json'), 'utf8'));
+  const cmd = settings.hooks.SessionStart[0].hooks[0].command;
+  assert.match(cmd, /^\$CLAUDE_PROJECT_DIR\//, 'the hook command is not rooted in $CLAUDE_PROJECT_DIR');
+  assert.ok(fs.existsSync(path.join(ROOT, cmd.replace('$CLAUDE_PROJECT_DIR/', ''))),
+    `.claude/settings.json points at a file that does not exist: ${cmd}`);
+});
+
+test('a failed build leaves the previous render untouched', () => {
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-atomic-'));
+  for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
+  const build = () => {
+    try { execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' }); return 0; }
+    catch (e) { return e.status; }
+  };
+  assert.strictEqual(build(), 0, 'the first build of an unmutated copy failed');
+
+  const snapshot = () => {
+    const out = {};
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const f = path.join(d, e.name);
+        if (e.isDirectory()) walk(f); else out[path.relative(tmp, f)] = fs.readFileSync(f, 'utf8');
+      }
+    };
+    walk(path.join(tmp, 'dist'));
+    return out;
+  };
+  const before = snapshot();
+
+  // Change an agent that renders early so a successful build WOULD alter dist/, then break a later one so it cannot
+  // finish. Agents render in directory order, so basher is written well before the investigator throws.
+  const edit = (file, from, to) => {
+    const p = path.join(tmp, 'agents', file);
+    const text = fs.readFileSync(p, 'utf8');
+    assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in ${file}`);
+    fs.writeFileSync(p, text.replace(from, to));
+  };
+  edit('away-team-basher.agent.md', 'description: Fixes a bug', 'description: SENTINEL Fixes a bug');
+  edit('away-team-investigator.agent.md', 'model: strong', 'model: bogus');
+
+  assert.notStrictEqual(build(), 0, 'the build succeeded with a bogus model tier');
+  assert.deepStrictEqual(snapshot(), before, 'a failed build left dist/ partly rewritten');
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('both marketplace manifests point at a render that exists', () => {
+  // Hand-maintained, user-facing, and the only thing standing between `plugin marketplace add` and a 404.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  for (const [file, platform] of [['.claude-plugin/marketplace.json', 'claude'], ['.github/plugin/marketplace.json', 'copilot']]) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    assert.strictEqual(manifest.plugins.length, 1, `${file}: expected exactly one plugin entry`);
+    const entry = manifest.plugins[0];
+    assert.strictEqual(entry.source, `./dist/${platform}`, `${file}: source is ${entry.source}, not ./dist/${platform}`);
+    for (const sub of ['agents', 'skills']) {
+      const dir = path.join(ROOT, 'dist', platform, sub);
+      assert.ok(fs.existsSync(dir), `${file}: ${entry.source}/${sub} does not exist`);
+      assert.ok(fs.readdirSync(dir).length, `${file}: ${entry.source}/${sub} is empty`);
+    }
+    for (const key of ['name', 'description']) assert.ok(entry[key], `${file}: plugin entry has no ${key}`);
+  }
+  // The two plugin manifests are generated, so a mismatch here means the build drifted from package.json.
+  for (const f of ['claude/.claude-plugin/plugin.json', 'copilot/plugin.json']) {
+    const meta = JSON.parse(fs.readFileSync(dist(f), 'utf8'));
+    assert.strictEqual(meta.version, pkg.version, `dist/${f}: version ${meta.version} is not package.json's ${pkg.version}`);
   }
 });

@@ -1,2 +1,9 @@
 node_modules/
 _testhome*/
+
+# Rendered into the checkout by .claude/hooks/session-start.sh; the source is agents/, skills/
+# and hooks/, and dist/ is the committed render. Committing these too would be a third copy
+# that drifts, and would bake the installing machine's MCP servers into the repo.
+.claude/agents/
+.claude/skills/
+.claude/hooks/readonly-guard.js

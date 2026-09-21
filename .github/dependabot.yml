@@ -1,0 +1,17 @@
+# Two ecosystems, both small: three npm dependencies and the actions the two workflows pin by major.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the lot: every update here runs the same npm test, so reviewing them apart buys nothing.
+      dependencies:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions:
+        patterns: ['*']

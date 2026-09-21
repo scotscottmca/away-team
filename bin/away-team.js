@@ -3,13 +3,13 @@
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
 //   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
 //   --mcp <a,b>                                       extra MCP servers, on top of the ones found on this machine
-//   --no-mcp                                          skip MCP entirely (smaller cold start; nothing but the built-ins)
+//   --no-mcp                                          skip MCP entirely (isolation, not cost: a tool name is ~11 tokens)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const pkg = require('../package.json');
@@ -49,7 +49,9 @@ const list = (name) => (opt(name) || '').split(',').map((s) => s.trim()).filter(
 // Every child gets a timeout and an empty stdin: a hung or stdin-reading install must not hang the installer.
 const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encoding: 'utf8', input: '', timeout, killSignal: 'SIGKILL' });
 // The whole crew gets every MCP server this machine has. A tool allowlist is deny-by-default, so a server has to be
-// named in it or the agent cannot see it — hence discovery rather than a fixed list. Both platforms ignore an entry
+// named in it or the agent cannot see it — hence discovery rather than a fixed list. Measured cost of that breadth:
+// only tool names reach a cold start, about 11 tokens each, and padding every description tenfold changed nothing,
+// so schemas are fetched on demand. See docs/cost.md; --no-mcp is for isolation, not for cost. Both platforms ignore an entry
 // for a server that is not configured, so every source here is best-effort and a false positive costs nothing.
 // The Azure DevOps server ships as a default under both names its own guide registers it as (`ado` on Copilot CLI,
 // `azure-devops` on Claude Code); it is also what dist/ is built with, since that is shared and cannot be discovered for.
@@ -116,14 +118,17 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
   return text.split(/\r?\n/).map((line) => {
     let m;
     if (dropping) { if (/^\s+\S/.test(line)) return null; dropping = false; }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if ((m = line.match(/^model: (\w+)$/))) {
       const model = MODELS[platform][m[1]];
       if (!model) bad(`unknown model tier "${m[1]}": expected one of ${Object.keys(MODELS[platform]).join(', ')}`);
       return `model: ${model}`;
     }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if (platform === 'claude' && (m = line.match(/^skills: \[(.*)\]$/))) {
       return `skills: [${parseTools(m[1]).map(([a]) => JSON.stringify(scope(a))).join(', ')}]`;
     }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if ((m = line.match(/^tools: \[(.*)\]$/))) {
       const entries = parseTools(m[1]);
       for (const [a] of entries) {
@@ -153,21 +158,19 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
   }).filter((l) => l !== null).join('\n');
 }
 
-// Writes agents/ and skills/ under dest in the platform's format.
-function emit(platform, dest, opts = {}) {
-  fs.mkdirSync(path.join(dest, 'agents'), { recursive: true });
+// Renders every file for one platform under dest, in that platform's format. Pure: it touches no disk, so an
+// unknown tier or tool alias throws here, before anything has been removed or written. flush() does the writing.
+function plan(platform, dest, opts = {}) {
+  const files = [];
   for (const f of agents) {
     const out = platform === 'copilot' ? f : f.replace(/\.agent\.md$/, '.md');
-    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f }));
+    files.push([path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f })]);
   }
-  fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
-  // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
-  if (platform === 'claude') fs.cpSync(path.join(ROOT, 'hooks'), path.join(dest, 'hooks'), { recursive: true });
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
   // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
   if (opts.plugin) {
     const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
-    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), JSON.stringify({ hooks }, null, 2) + '\n');
+    files.push([path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`]);
   }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
@@ -179,11 +182,27 @@ function emit(platform, dest, opts = {}) {
     const allowed = tools ? tools[1].replace(/\([^)]*\)/g, '').split(', ') : Object.values(CLAUDE_TOOLS).join(', ').split(', ');
     const disallowed = Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t));
     const body = rendered.split(/^---\r?\n/m)[2];
-    const dir = path.join(dest, 'skills', ORCHESTRATOR);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`);
+    files.push([path.join(dest, 'skills', ORCHESTRATOR, 'SKILL.md'),
+      `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`]);
+  }
+
+  const copies = [[path.join(ROOT, 'skills'), path.join(dest, 'skills')]];
+  // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
+  if (platform === 'claude') copies.push([path.join(ROOT, 'hooks'), path.join(dest, 'hooks')]);
+  return { copies, files };
+}
+
+// Applies a plan. Nothing here can fail on bad input, so by the time it runs the render has already succeeded.
+function flush({ copies, files }) {
+  for (const [from, to] of copies) fs.cpSync(from, to, { recursive: true });
+  for (const [file, content] of files) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
   }
 }
+
+// Writes agents/ and skills/ under dest in the platform's format.
+const emit = (platform, dest, opts = {}) => flush(plan(platform, dest, opts));
 
 // ponytail and caveman both read defaultMode from $XDG_CONFIG_HOME/<name>/config.json,
 // else %APPDATA%\<name>\config.json on Windows, else ~/.config/<name>/config.json.
@@ -199,7 +218,7 @@ function setDefaultMode(name, level) {
   try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
   cfg.defaultMode = level;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+  fs.writeFileSync(file, `${JSON.stringify(cfg, null, 2)}\n`);
 }
 
 // Caveman on Copilot is skill-only (no hooks), so its default level has to come from personal instructions.
@@ -261,16 +280,21 @@ const mcpFor = (built) => (flag('--no-mcp') ? [] : built ? DEFAULT_MCP
 
 if (flag('--build')) {
   const dist = path.join(ROOT, 'dist');
-  fs.rmSync(dist, { recursive: true, force: true });
   const meta = {
     name: PLUGIN, version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
-  emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
-  fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2) + '\n');
-  emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
-  fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
-  fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), JSON.stringify(meta, null, 2) + '\n');
+  // Render both platforms before removing anything. dist/ is wiped so a deleted agent cannot linger in it, and a
+  // build that throws half way would otherwise leave nothing there at all.
+  const plans = [
+    plan('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+    plan('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+  ];
+  plans[0].files.push([path.join(dist, 'copilot', 'plugin.json'),
+    `${JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2)}\n`]);
+  plans[1].files.push([path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), `${JSON.stringify(meta, null, 2)}\n`]);
+  fs.rmSync(dist, { recursive: true, force: true });
+  plans.forEach(flush);
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
   process.exit(0);
 }

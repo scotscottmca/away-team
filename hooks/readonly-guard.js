@@ -8,8 +8,8 @@
 // agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with `--agent <name>`: the guard then
 // enforces only when the hook input's agent_type is that agent (bare, or <plugin>:<name>) and exits 0 otherwise.
 // Exits 2 with a reason on stderr to deny the call.
-const os = require('os');
-const path = require('path');
+const os = require('node:os');
+const path = require('node:path');
 
 const ONLY_AGENT = process.argv.includes('--agent') ? process.argv[process.argv.indexOf('--agent') + 1] : null;
 const isOnlyAgent = (t) => !!t && (t === ONLY_AGENT || t.endsWith(`:${ONLY_AGENT}`));
@@ -56,7 +56,7 @@ function violation(cmd) {
     }
     if (cmd0 === 'gh' && args.length && GH_WRITE.test(args[0]) && !(args[1] && GH_READ.test(args[1]))) {
       if (args[0] === 'api' && !rest.some((f) => /^(-X|--method)$/.test(f))) continue; // GET by default
-      return `gh ${args[0]} ${args[1] || ''}`.trim() + ' writes to GitHub';
+      return `${`gh ${args[0]} ${args[1] || ''}`.trim()} writes to GitHub`;
     }
   }
   return null;
@@ -83,7 +83,7 @@ process.stdin.on('end', () => {
     if (ONLY_AGENT && !isOnlyAgent(hook.agent_type)) process.exit(0);
     const name = hook.tool_name || '';
     why = /^mcp__/.test(name) || name.includes('/') ? mcpViolation(name)
-      : violation((hook.tool_input || {}).command || '');
+      : violation(hook.tool_input?.command || '');
   } catch { process.exit(0); }
   if (!why) process.exit(0);
   process.stderr.write(
