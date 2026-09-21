@@ -21,6 +21,8 @@ const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 
 // Frontmatter keys only Copilot understands; dropped from the Claude render.
 const COPILOT_ONLY_KEYS = ['disable-model-invocation'];
 // Placeholder in agent bodies for the directory this install writes to; hook commands resolve through it.
+// A project-scope install is committed and shared, so it must resolve at runtime, not bake in this machine's path:
+// Claude Code exports CLAUDE_PROJECT_DIR (session root) and CLAUDE_PLUGIN_ROOT (plugin directory) to hook commands.
 const ROOT_VAR = '${AWAY_TEAM_ROOT}';
 const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
@@ -322,7 +324,8 @@ const BANNER = `
   const manual = [];
   for (const t of targets) {
     const dest = destFor(t);
-    emit(t, dest, { root: dest });
+    // Absolute for a global install, portable for a project install: teammates check the repo out elsewhere.
+    emit(t, dest, { root: scope === 'project' ? '${CLAUDE_PROJECT_DIR}/.claude' : dest });
     p.log.success(`${t === 'copilot' ? 'GitHub Copilot' : 'Claude Code'}: agents and skills → ${dest}`);
     if (t === 'copilot' && companions.includes('caveman')) setInstructionLine(home('.copilot', 'copilot-instructions.md'), level);
 

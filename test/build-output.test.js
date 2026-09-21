@@ -102,3 +102,27 @@ test('dist matches a fresh build', () => {
   const status = execFileSync('git', ['status', '--porcelain', '--', 'dist'], { cwd: ROOT, encoding: 'utf8' }).trim();
   assert.strictEqual(status, '', `dist/ differs from what is committed:\n${status}\nRun "npm run build" and commit dist/.`);
 });
+
+test('an install writes a hook path that resolves on the target machine', () => {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-'));
+  const home = path.join(tmp, 'home');
+  const repo = path.join(tmp, 'repo');
+  fs.mkdirSync(home, { recursive: true });
+  fs.mkdirSync(repo, { recursive: true });
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const install = (args, cwd) =>
+    execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--yes', '--target', 'claude', '--skip-plugins', ...args],
+      { cwd, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
+
+  install(['--scope', 'project'], repo);
+  const project = fs.readFileSync(path.join(repo, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');
+  // A project install is committed and shared, so the path must resolve at runtime on any checkout.
+  assert.match(project, /command: 'node "\$\{CLAUDE_PROJECT_DIR\}\/\.claude\/hooks\/readonly-guard\.js"'/);
+  assert.ok(fs.existsSync(path.join(repo, '.claude', 'hooks', 'readonly-guard.js')), 'project install ships no guard');
+
+  install(['--scope', 'global'], tmp);
+  const global = fs.readFileSync(path.join(home, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');
+  assert.ok(global.includes(`command: 'node "${path.join(home, '.claude')}/hooks/readonly-guard.js"'`),
+    `global install hook path is not absolute:\n${global.match(/command: .*/)}`);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
