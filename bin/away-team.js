@@ -40,6 +40,8 @@ const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
 const INVESTIGATOR = 'away-team-investigator'; // the read-only specialist hooks/readonly-guard.js is scoped to
+// Agents whose Bash the guard must enforce read-only, session-wide, on the plugin build.
+const GUARDED_AGENTS = [INVESTIGATOR, ORCHESTRATOR];
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -172,7 +174,8 @@ function plan(platform, dest, opts = {}) {
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
   // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
   if (opts.plugin) {
-    const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
+    const agentFlags = GUARDED_AGENTS.map((a) => `--agent ${a}`).join(' ');
+    const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" ${agentFlags}` }] }] };
     files.push([path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`]);
   }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
@@ -183,7 +186,9 @@ function plan(platform, dest, opts = {}) {
     const model = rendered.match(/^model: (.*)$/m)[1];
     const tools = rendered.match(/^tools: (.*)$/m); // absent when the agent has every tool
     const allowed = tools ? tools[1].replace(/\([^)]*\)/g, '').split(', ') : Object.values(CLAUDE_TOOLS).join(', ').split(', ');
-    const disallowed = Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t));
+    // A skill cannot carry the guard, so Bash is force-excluded here regardless of the agent's own allowlist: the
+    // orchestrator's read-only Bash is fine on the main thread (guarded), but unenforced prose on a skill turn.
+    const disallowed = [...new Set([...Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t)), 'Bash'])];
     const body = rendered.split(/^---\r?\n/m)[2];
     files.push([path.join(dest, 'skills', ORCHESTRATOR, 'SKILL.md'),
       `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`]);

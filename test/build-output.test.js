@@ -133,27 +133,36 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   const guard = dist('claude', 'hooks', 'readonly-guard.js');
   assert.ok(fs.existsSync(guard), 'dist/claude/hooks/readonly-guard.js is missing');
   // Claude Code ignores frontmatter hooks on plugin agents (it logs a warning and runs nothing), so the plugin must
-  // not carry them; it registers the guard from hooks/hooks.json, scoped to the investigator by agent name.
+  // not carry them; it registers the guard from hooks/hooks.json, scoped to the investigator and the orchestrator
+  // (which also carries read-only Bash now) by agent name.
   const fm = frontmatter(fs.readFileSync(dist('claude', 'agents', 'away-team-investigator.md'), 'utf8'));
   assert.ok(!/^hooks:/m.test(fm), 'plugin investigator carries frontmatter hooks, which Claude Code ignores on plugin agents');
   assert.ok(/^disallowedTools: .*\bEdit\b/m.test(fm), 'plugin investigator does not disallow Edit');
+  const orchestratorFm = frontmatter(fs.readFileSync(dist('claude', 'agents', 'away-team.md'), 'utf8'));
+  assert.ok(!/^hooks:/m.test(orchestratorFm), 'plugin orchestrator carries frontmatter hooks, which Claude Code ignores on plugin agents');
+  assert.match(orchestratorFm.match(/^tools: (.*)$/m)[1], /\bBash\b/, 'plugin orchestrator tools do not include Bash');
+  const skill = fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8');
+  assert.match(skill, /^disallowed-tools: .*\bBash\b/m, 'desktop skill does not disallow Bash (a skill carries no hook)');
   const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;
   // The guard inspects Bash and every MCP tool: the crew now carries every MCP server the machine has.
   const entry = hooks.PreToolUse.find((h) => /\bBash\b/.test(h.matcher));
   assert.match(entry.matcher, /mcp__/, 'guard matcher does not cover MCP tools');
   const cmd = entry.hooks[0].command;
-  assert.strictEqual(cmd, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/readonly-guard.js" --agent away-team-investigator');
+  assert.strictEqual(cmd, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/readonly-guard.js" --agent away-team-investigator --agent away-team');
   const probe = (command, args = [], extra = {}) => {
     try { execFileSync('node', [guard, ...args], { input: JSON.stringify({ tool_input: { command }, ...extra }) }); return 0; }
     catch (e) { return e.status; }
   };
   const probeTool = (tool_name) => probe('', [], { tool_name });
-  for (const c of ['npm test', 'git log -S x', 'cat a.js > /tmp/b']) assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
+  for (const c of ['npm test', 'git log -S x', 'cat a.js > /tmp/b', 'git status', 'git log --oneline -5',
+    'gh pr view 1', 'gh issue list']) {
+    assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
+  }
   for (const c of ['echo x > src/a.js', "sed -i 's/a/b/' a.js", 'git commit -am x']) assert.strictEqual(probe(c), 2, `guard allowed "${c}"`);
-  // Session-wide from hooks.json, the guard must bite only when the investigator (bare or plugin-scoped) is running.
-  const scoped = ['--agent', 'away-team-investigator'];
-  for (const t of ['away-team-investigator', 'away-team:away-team-investigator']) {
-    assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 2, `scoped guard allowed the investigator (${t})`);
+  // Session-wide from hooks.json, the guard must bite when either guarded agent (bare or plugin-scoped) is running.
+  const scoped = ['--agent', 'away-team-investigator', '--agent', 'away-team'];
+  for (const t of ['away-team-investigator', 'away-team:away-team-investigator', 'away-team', 'away-team:away-team']) {
+    assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 2, `scoped guard allowed agent_type ${t}`);
   }
   for (const t of ['away-team:away-team-basher', 'away-team-basher', undefined]) {
     assert.strictEqual(probe('echo x > src/a.js', scoped, { agent_type: t }), 0, `scoped guard blocked agent_type ${t}`);
