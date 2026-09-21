@@ -95,7 +95,7 @@ Ponytail and caveman both default to **ultra**. Change the default with `npx @sc
 
 ## Model tiers
 
-Agents carry a tier, not a model. The installer resolves the tier per platform, so each platform uses the best model it has for that job. The mapping is the `MODELS` table at the top of `bin/away-team.js`; edit it for your plan, then `npm run build` to refresh `dist/`.
+Agents carry a tier, not a model. The installer resolves the tier per platform, so each platform uses the best model it has for that job. The mapping is the ordered priority list in `bin/models.js`, one row per model with its per-platform aliases; the first row in a tier that names the platform wins. Edit it for your plan, then `npm run build` to refresh `dist/`.
 
 | Agent | Tier | Why |
 |---|---|---|
@@ -113,14 +113,14 @@ Defaults shipped:
 | balanced | `claude-sonnet-5` | `sonnet` |
 | strong | `claude-opus-5` | `opus` |
 
-How the defaults were chosen: for each tier, the cheapest model on Copilot's per-token price list that is good at the tier's job. A model priced like a tier's default but older, or priced between two tiers with no distinct strength, adds nothing and is left out. Claude Code aliases resolve to the newest model of each tier automatically; if your plan exposes a stronger alias (for example `fable`), set it as `strong`.
+How the defaults were chosen: for each tier, the cheapest model on Copilot's per-token price list that is good at the tier's job. A model priced like a tier's default but older, or priced between two tiers with no distinct strength, adds nothing and is left out. Claude Code aliases resolve to the newest model of each tier automatically; if your plan exposes a stronger alias (for example `fable`), prepend a row to that tier in `bin/models.js` — `{ claude: 'fable' }` — rather than replacing the default; Copilot falls through to the next row.
 
 Cheaper choices when cost bites: a code-specialised mid-price model for `balanced` on basher, and the cheap tier for pr-writer.
 
 ## Caveats
 
 1. **Copilot CLI may downgrade a subagent's model to the session model** when the subagent's is pricier ([copilot-cli#2758](https://github.com/github/copilot-cli/issues/2758)). So the investigator only gets the strong tier if the session is on it. Run sessions on the balanced tier and `/model` up for a hard triage. Cheaper subagent models are never downgraded. Claude Code has no such downgrade.
-2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs. Run `/model` once to see the spelling your CLI accepts and fix `MODELS` in `bin/away-team.js` if it differs.
+2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs. Run `/model` once to see the spelling your CLI accepts and fix the `copilot` alias for that tier in `bin/models.js` if it differs.
 3. Copilot's auto model selection gives a discount but ignores per-agent models; not used here.
 4. **The Claude desktop skill enforces less than the agent.** `/away-team` is the orchestrator's body as a skill, for the desktop app's lack of an agent picker. A skill can carry `model` and `disallowed-tools`, and the render sets both (the balanced tier; every tool the agent's allowlist leaves out), but they apply only to the turn that invokes the skill and clear on your next message, and a skill cannot restrict which subagents the Agent tool may spawn. After that first turn, "never edits code" is prose. For the enforced form on the desktop app, set `"agent": "away-team"` in the project's `.claude/settings.json` (table above): every session in that project then runs the orchestrator with its tool list and model.
 5. **The read-only guard is Claude Code only, and it now covers the orchestrator too.** Per-agent `hooks:` (and `disallowedTools`, investigator-only — the orchestrator's `execute` is allowed, just guarded) are Claude Code frontmatter; Copilot custom agents have neither, and the render drops both. On Copilot the investigator's tool list still excludes editing tools, and the orchestrator's `execute` is unguarded Bash the same way, so "read-only" is prose the model is trusted to follow on both. Treat a Copilot investigation, or a Copilot orchestrator session, as advisory on that point. On Claude Code 2.1.278 the guard is checked live on all three install paths (plugin, global npx, project npx), as the main thread and as a spawned subagent, but each path wires it differently: the npx installs use each agent's own `hooks:` frontmatter, which Claude Code ignores on plugin agents (it logs `sets hooks, which is ignored for plugin agents`), so the plugin registers the guard session-wide from `hooks/hooks.json` with `--agent away-team-investigator --agent away-team`, and the guard enforces only when the hook input's `agent_type` matches one of those. A project install additionally needs the repo folder trusted (see Install).

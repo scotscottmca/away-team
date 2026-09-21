@@ -7,10 +7,12 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
-const MODELS = {
-  copilot: ['gpt-5.6-luna', 'claude-sonnet-5', 'claude-opus-5'],
-  claude: ['haiku', 'sonnet', 'opus', 'fable'],
-};
+// The single source of truth (issue 17): a tier -> ordered priority list of platform aliases, required rather
+// than hand-duplicated here, so a drift between the build and this test (a stale or missing model id) is caught
+// instead of blessed.
+const MODEL_TIERS = require('../bin/models.js');
+const modelIds = (platform) => [...new Set(Object.values(MODEL_TIERS).flatMap((rows) => rows.map((r) => r[platform]).filter(Boolean)))];
+const MODELS = { copilot: modelIds('copilot'), claude: modelIds('claude') };
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
 const REPORTS = {
   'away-team-mapper': '## Map report',
@@ -72,6 +74,28 @@ test('every allowlisted agent can reach the Azure DevOps MCP server by default',
     if (!m) continue;
     const want = a.platform === 'claude' ? ['mcp__ado__*', 'mcp__azure-devops__*'] : ['"ado/*"', '"azure-devops/*"'];
     for (const w of want) assert.ok(m[1].includes(w), `${a.platform}/${a.name}: tools lack ${w}`);
+  }
+});
+
+test('every allowlisted agent can reach the GitHub MCP server by default', () => {
+  // The GitHub MCP server is what a hosted/remote session injects in place of a `gh` binary (issue 14): a server
+  // that cannot be discovered but is the house default, same rationale as ado/azure-devops above.
+  for (const a of all) {
+    const m = frontmatter(a.text).match(/^tools: (.*)$/m);
+    if (!m) continue;
+    const want = a.platform === 'claude' ? 'mcp__github__*' : '"github/*"';
+    assert.ok(m[1].includes(want), `${a.platform}/${a.name}: tools lack ${want}`);
+  }
+});
+
+test('pr-writer prefers the GitHub MCP path but keeps the gh fallback', () => {
+  // Issue 14: `gh` is unavailable in hosted/remote sessions. pr-writer must try MCP first and fall back to `gh`,
+  // never gate on `gh` alone — a bare "no gh -> Blocked" sentence would kill the step before MCP gets a chance.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team-pr-writer')) {
+    const mcpRef = a.platform === 'claude' ? 'mcp__github__' : 'github/';
+    assert.ok(a.text.includes(mcpRef), `${a.platform}/${a.name}: no GitHub MCP reference`);
+    assert.ok(a.text.includes('gh pr create'), `${a.platform}/${a.name}: lost the gh fallback`);
+    assert.ok(!/No `?gh`?,? ?not authenticated/i.test(a.text), `${a.platform}/${a.name}: still gates preflight on gh alone`);
   }
 });
 
@@ -242,14 +266,14 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github__get_issue');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -307,6 +331,13 @@ const breakAgent = (file, from, to) => (tmp) => {
   assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in ${file}`);
   fs.writeFileSync(p, text.replace(from, to));
 };
+// Same swap-and-assert, over bin/models.js instead of an agent file.
+const breakModels = (from, to) => (tmp) => {
+  const p = path.join(tmp, 'bin', 'models.js');
+  const text = fs.readFileSync(p, 'utf8');
+  assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in bin/models.js`);
+  fs.writeFileSync(p, text.replace(from, to));
+};
 
 test('the build rejects bad input instead of rendering it', () => {
   // Sanity first: an unmutated copy builds, so a failure below is the mutation and not the harness.
@@ -318,11 +349,30 @@ test('the build rejects bad input instead of rendering it', () => {
     ['unknown model tier', breakAgent(INV, 'model: strong', 'model: bogus'), /unknown model tier "bogus"/],
     ['unknown tool alias', breakAgent(INV, TOOLS, '"read", "telepathy", "execute"'), /unknown tool alias "telepathy"/],
     ['malformed tools entry', breakAgent(INV, TOOLS, '"read(", "execute"'), /bad tools entry "read\("/],
+    // issue 17: a tier whose rows have no alias for a platform must fail the build loudly, not render "model: undefined".
+    ['model tier missing a platform alias', breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5' }]", "strong: [{ claude: 'opus' }]"),
+      /model tier "strong" has no copilot alias/],
   ]) {
     const { code, output } = buildCopy(mutate);
     assert.notStrictEqual(code, 0, `${name}: the build succeeded instead of failing`);
     assert.match(output, expected, `${name}: the build failed without naming the cause`);
   }
+});
+
+test('models.js is an ordered priority list: the first row aliased for a platform wins, others fall through', () => {
+  // issue 17: prepending a row (a plan-only model like `fable`) must change the rendered model without touching
+  // the winning row, and a row missing one platform's key must be skipped for that platform only.
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-models-'));
+  for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
+  breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5' }]",
+    "strong: [{ claude: 'fable' }, { claude: 'opus', copilot: 'claude-opus-5' }]")(tmp);
+  execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' });
+  const claudeAgent = fs.readFileSync(path.join(tmp, 'dist', 'claude', 'agents', 'away-team-investigator.md'), 'utf8');
+  assert.match(claudeAgent, /^model: fable$/m, 'the prepended row did not win priority on Claude');
+  const copilotAgent = fs.readFileSync(path.join(tmp, 'dist', 'copilot', 'agents', 'away-team-investigator.agent.md'), 'utf8');
+  assert.match(copilotAgent, /^model: claude-opus-5$/m, 'a row with no copilot key was not skipped for copilot only');
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 test('the web session hook parses, stays silent off the remote, and is wired to a real file', () => {

@@ -1,6 +1,6 @@
 ---
 name: pr-format
-description: House pull-request format. Conventional-commit title, short TL;DR body, full technical breakdown as PR review comments, plus the gh commands to post them. Use when writing, updating or reviewing a PR description.
+description: House pull-request format. Conventional-commit title, short TL;DR body, full technical breakdown as PR review comments, plus the GitHub MCP calls (or gh commands, if no MCP GitHub server) to post them. Use when writing, updating or reviewing a PR description.
 ---
 
 # PR format
@@ -35,15 +35,17 @@ Full breakdown in the review comments.
 
 ## Commands
 
+Prefer the GitHub MCP server (`mcp__github__*` on Claude Code, `github/*` on Copilot) when it is on your allowlist — it works in hosted/remote sessions where `gh` is not installed. Fall back to `gh` only when no GitHub MCP server is available.
+
+| Step | MCP (preferred) | `gh` (fallback) |
+|---|---|---|
+| create or update | `create_pull_request`, `update_pull_request` | `gh pr create --title "fix(auth): reject expired refresh tokens" --body-file pr-body.md --base main` / `gh pr edit <n> --body-file pr-body.md` |
+| top-level breakdown comment | `add_issue_comment` | `gh pr comment <n> --body-file breakdown.md` |
+| inline review comments | `pull_request_review_write` (method `create`) → `add_comment_to_pending_review` per comment → `pull_request_review_write` (method `submit_pending`) | `gh api repos/{owner}/{repo}/pulls/<n>/reviews` (below) |
+
+`gh` fallback for inline review comments, one review, many comments:
+
 ```bash
-# create or update
-gh pr create --title "fix(auth): reject expired refresh tokens" --body-file pr-body.md --base main
-gh pr edit <n> --body-file pr-body.md
-
-# top-level breakdown comment
-gh pr comment <n> --body-file breakdown.md
-
-# inline review comments: one review, many comments
 SHA=$(gh pr view <n> --json headRefOid -q .headRefOid)
 cat > review.json <<EOF
 {"commit_id":"$SHA","event":"COMMENT","body":"Breakdown",
