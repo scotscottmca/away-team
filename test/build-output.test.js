@@ -271,3 +271,92 @@ test('each specialist names its own turn cap, so the prose cannot drift from the
       `claude/${a.name}: maxTurns is ${cap} but the body never says "${cap} turns"`);
   }
 });
+
+// --- Gates around the build itself, rather than its output. ---
+
+// Runs a build from a throwaway copy of the repo, so a deliberately broken agent never touches the real
+// tree. `--build` exits before the installer requires @clack/prompts, so the copy needs no node_modules.
+const buildCopy = (mutate) => {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-build-'));
+  for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
+  mutate(tmp);
+  try {
+    execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' });
+    return { code: 0, output: '' };
+  } catch (e) {
+    return { code: e.status, output: `${e.stderr}${e.stdout}` };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+};
+// Swaps one exact string in one agent, asserting the fixture still matches so a reworded agent fails
+// here with "fixture drift" rather than silently testing nothing.
+const breakAgent = (file, from, to) => (tmp) => {
+  const p = path.join(tmp, 'agents', file);
+  const text = fs.readFileSync(p, 'utf8');
+  assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in ${file}`);
+  fs.writeFileSync(p, text.replace(from, to));
+};
+
+test('the build rejects bad input instead of rendering it', () => {
+  // Sanity first: an unmutated copy builds, so a failure below is the mutation and not the harness.
+  assert.strictEqual(buildCopy(() => {}).code, 0, 'an unmutated copy of the repo failed to build');
+
+  const INV = 'away-team-investigator.agent.md';
+  const TOOLS = '"read", "search", "execute"';
+  for (const [name, mutate, expected] of [
+    ['unknown model tier', breakAgent(INV, 'model: strong', 'model: bogus'), /unknown model tier "bogus"/],
+    ['unknown tool alias', breakAgent(INV, TOOLS, '"read", "telepathy", "execute"'), /unknown tool alias "telepathy"/],
+    ['malformed tools entry', breakAgent(INV, TOOLS, '"read(", "execute"'), /bad tools entry "read\("/],
+  ]) {
+    const { code, output } = buildCopy(mutate);
+    assert.notStrictEqual(code, 0, `${name}: the build succeeded instead of failing`);
+    assert.match(output, expected, `${name}: the build failed without naming the cause`);
+  }
+});
+
+test('the web session hook parses, stays silent off the remote, and is wired to a real file', () => {
+  const hook = path.join(ROOT, '.claude', 'hooks', 'session-start.sh');
+  assert.ok(fs.existsSync(hook), '.claude/hooks/session-start.sh is missing');
+  assert.ok(fs.statSync(hook).mode & 0o111, 'session-start.sh is not executable, so the hook never runs');
+  // Parse without executing: a syntax error here breaks every web session, and nothing else would catch it.
+  execFileSync('bash', ['-n', hook], { stdio: 'pipe' });
+  // Off the remote it must do nothing: a local machine has its own global install.
+  assert.strictEqual(execFileSync('bash', [hook], { encoding: 'utf8', stdio: 'pipe',
+    env: { ...process.env, CLAUDE_CODE_REMOTE: '' } }), '', 'the hook is not a no-op outside a remote session');
+
+  // That early exit is trivially silent, so drive the real path too. Stubs on PATH shout on both streams:
+  // anything the script does not route through its quiet() helper lands in the session's context, and a
+  // failure must still surface rather than being swallowed with it.
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-hook-'));
+  const stubs = path.join(tmp, 'stubs');
+  fs.mkdirSync(stubs);
+  // Per command, so each step is covered on its own: a stub that fails first would otherwise mask the ones after it.
+  const stub = (codes) => {
+    for (const [name, exit] of Object.entries(codes)) {
+      const f = path.join(stubs, name);
+      fs.writeFileSync(f, `#!/bin/sh\necho "stdout noise"\necho "stderr noise" >&2\nexit ${exit}\n`);
+      fs.chmodSync(f, 0o755);
+    }
+  };
+  const runHook = () => execFileSync('bash', [hook], { encoding: 'utf8', stdio: 'pipe',
+    env: { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: tmp, PATH: `${stubs}:${process.env.PATH}` } });
+
+  stub({ npm: 0, node: 0 });
+  assert.strictEqual(runHook(), '', 'the hook leaks command output into the session context');
+
+  // Every step must surface its own failure, not just the first one to run.
+  for (const codes of [{ npm: 1, node: 0 }, { npm: 0, node: 1 }]) {
+    stub(codes);
+    assert.throws(runHook, (e) => e.status !== 0 && /failed/.test(`${e.stderr}`),
+      `the hook swallows a failing step (${JSON.stringify(codes)})`);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+
+  const settings = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude', 'settings.json'), 'utf8'));
+  const cmd = settings.hooks.SessionStart[0].hooks[0].command;
+  assert.match(cmd, /^\$CLAUDE_PROJECT_DIR\//, 'the hook command is not rooted in $CLAUDE_PROJECT_DIR');
+  assert.ok(fs.existsSync(path.join(ROOT, cmd.replace('$CLAUDE_PROJECT_DIR/', ''))),
+    `.claude/settings.json points at a file that does not exist: ${cmd}`);
+});

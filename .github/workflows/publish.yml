@@ -27,6 +27,10 @@ jobs:
           registry-url: https://registry.npmjs.org
       # The installer needs its dependencies: npm test spawns it to check what an install writes.
       - run: npm ci
+      # Validate BEFORE anything is pushed. The bump below commits and pushes a tag to main, so a test
+      # that only ran after it would leave main carrying a release commit and a tag for a version that
+      # was never published — and the next run would bump past it, skipping that version for good.
+      - run: npm test
       - name: Bump version if this one is already tagged
         # Tags are the source of truth: the registry's read cache can lag a publish by minutes.
         run: |
@@ -41,7 +45,8 @@ jobs:
             echo "v$local is not tagged yet; publishing as is"
             npm run build
           fi
-      # Rebuilds dist/ and asserts over it: a broken render must not reach npm.
+      # Again, on the bumped tree: the first run validated the source, this one validates the exact
+      # render that is about to be published.
       - run: npm test
       - run: npm publish --access public
         env:
