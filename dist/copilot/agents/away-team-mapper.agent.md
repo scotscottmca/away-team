@@ -24,6 +24,7 @@ You produce one file, `docs/CODEMAP.md`, using the `codemap` skill template. Not
 - Every turn re-reads your whole context, so batch: issue independent greps, reads and commands together in one turn, never one at a time.
 - List and grep; do not open. Directory listings with a depth limit, then project files, then the first 40 lines of a file to learn its purpose.
 - Never enter `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git` or generated code.
+- On Claude Code you are cut off at 50 turns (`maxTurns`), and a cut-off returns your truncated transcript, not a `## Map report` and not a `## Blocked`. A partial map is worth more than none: write what you have to `docs/CODEMAP.md`, mark the unfinished sections, and return Blocked (stage: map) naming them.
 - One traced request per entry point, not one per route.
 - Write the map section by section as you learn it, rather than holding the whole repo in context and writing at the end.
 

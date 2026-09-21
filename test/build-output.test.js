@@ -69,7 +69,7 @@ test('every allowlisted agent can reach the Azure DevOps MCP server by default',
   // @azure-devops/mcp registers as `ado` (Copilot CLI guide) or `azure-devops` (Claude Code guide); both are in.
   for (const a of all) {
     const m = frontmatter(a.text).match(/^tools: (.*)$/m);
-    if (!m || m[1] === '["*"]') continue; // basher inherits everything
+    if (!m) continue;
     const want = a.platform === 'claude' ? ['mcp__ado__*', 'mcp__azure-devops__*'] : ['"ado/*"', '"azure-devops/*"'];
     for (const w of want) assert.ok(m[1].includes(w), `${a.platform}/${a.name}: tools lack ${w}`);
   }
@@ -163,11 +163,11 @@ test('an install gives the whole crew every MCP server the machine has', () => {
   const agentsOf = (t, ext) => fs.readdirSync(path.join(home, t, 'agents'))
     .map((f) => ({ name: f, tools: (fs.readFileSync(path.join(home, t, 'agents', f), 'utf8').match(/^tools: (.*)$/m) || [])[1] }));
   for (const { name, tools } of agentsOf('.claude')) {
-    if (!tools) continue; // basher declares every tool, so it has no tools line and inherits MCP already
+    assert.ok(tools, `claude/${name} has no tools line, so it inherits every tool`);
     for (const w of ['mcp__jira-user__*', 'mcp__pg-local__*']) assert.ok(tools.includes(w), `claude/${name} lacks ${w}`);
   }
   for (const { name, tools } of agentsOf('.copilot')) {
-    if (!tools || tools === '["*"]') continue;
+    assert.ok(tools && tools !== '["*"]', `copilot/${name} inherits every tool`);
     for (const w of ['"jira-user/*"', '"pg-local/*"']) assert.ok(tools.includes(w), `copilot/${name} lacks ${w}`);
   }
 
@@ -238,7 +238,36 @@ test('--mcp spells the server the way each platform reads it', () => {
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
     '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/get_issue"]');
-  // Basher inherits every tool and gets no entry.
-  assert.ok(!fs.readFileSync(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md'), 'utf8').includes('azure-devops'));
+  // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
+  assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
+    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('no agent inherits the full tool set, and only the orchestrator can spawn one', () => {
+  // A `tools: ["*"]` renders to no tools line on Claude Code, which grants Agent, WebFetch, WebSearch and the rest;
+  // on Copilot it grants `task`, whose subagents nest six deep by default. Nobody gets that (#21).
+  for (const a of all) {
+    const tools = (frontmatter(a.text).match(/^tools: (.*)$/m) || [])[1];
+    assert.ok(tools, `${a.platform}/${a.name}: no tools line, so it inherits every tool`);
+    assert.notStrictEqual(tools, '["*"]', `${a.platform}/${a.name}: declares every tool`);
+    if (a.name.replace(/^away-team:/, '') === 'away-team') {
+      // The orchestrator spawns, but only the four specialists it names.
+      if (a.platform === 'claude') assert.match(tools, /\bAgent\(/, 'orchestrator lost its scoped Agent allowlist');
+      continue;
+    }
+    for (const forbidden of [/\bAgent\b/, /\bWebFetch\b/, /\bWebSearch\b/, /"agent"/, /"task"/, /"web"/]) {
+      assert.ok(!forbidden.test(tools), `${a.platform}/${a.name}: tools grant ${forbidden} — only the orchestrator may`);
+    }
+  }
+});
+
+test('each specialist names its own turn cap, so the prose cannot drift from the frontmatter', () => {
+  // The soft stop rules ("~25 tool calls", "three fixes") only work if the body quotes the real ceiling (#11).
+  for (const a of agentFiles('claude')) {
+    const cap = (frontmatter(a.text).match(/^maxTurns: (\d+)$/m) || [])[1];
+    if (!cap) continue; // the orchestrator is the main thread and carries no cap
+    assert.ok(a.text.includes(`${cap} turns`),
+      `claude/${a.name}: maxTurns is ${cap} but the body never says "${cap} turns"`);
+  }
 });
