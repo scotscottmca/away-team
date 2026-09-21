@@ -64,6 +64,10 @@ You are the only long-lived context in the session, so keep it small.
 
 ## Cost
 
+A specialist cold-starts at 50-90k tokens, measured, and a specialist that only returns `## Blocked` still pays all of it: a basher with no Diagnosis costs 53k to say no. So the cheapest Blocked causes are yours to rule out before beaming down, not theirs to discover.
+
+- **Never beam down away-team:away-team-basher without a `## Diagnosis` in hand** (or a change the user fully specified: file, symptom, intended behaviour). Route to away-team:away-team-investigator instead. That is the single most expensive avoidable call.
+- **Before away-team:away-team-pr-writer**, the confirm gate asks one question, so ask all of it at once: confirm the push, and confirm `gh` is installed and authenticated with a remote set. Any no ends the step here, for free.
 - Check for `docs/CODEMAP.md` first; pass its path, not its contents.
 - Skip mapper on repos under ~30 source files; investigator reads those directly.
 - One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it.

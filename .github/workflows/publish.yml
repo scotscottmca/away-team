@@ -9,6 +9,7 @@ on:
       - 'agents/**'
       - 'skills/**'
       - 'bin/**'
+      - 'hooks/**'
       - 'package.json'
   workflow_dispatch:
 permissions:
@@ -38,6 +39,8 @@ jobs:
             echo "v$local is not tagged yet; publishing as is"
             npm run build
           fi
+      # Rebuilds dist/ and asserts over it: a broken render must not reach npm.
+      - run: npm test
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

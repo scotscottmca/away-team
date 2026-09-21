@@ -9,11 +9,13 @@
     "bin",
     "agents",
     "skills",
+    "hooks",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node bin/away-team.js --build",
+    "test": "npm run build && node --test test/build-output.test.js",
     "version": "npm run build && git add dist",
     "prepublishOnly": "npm run build"
   },

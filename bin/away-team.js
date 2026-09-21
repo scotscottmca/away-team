@@ -2,6 +2,8 @@
 // away-team installer.
 //   npx @scotscottmca/away-team                       interactive: detects Copilot / Claude Code, asks what to install
 //   flags skip the matching prompt:  --target copilot|claude|all   --scope global|project   --skip-plugins   --level lite|full|ultra   --yes
+//   --mcp <a,b>                                       give every agent with a tool allowlist access to these MCP servers
+//                                                     (the Azure DevOps server, @azure-devops/mcp, is always included)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
 const fs = require('fs');
@@ -15,21 +17,42 @@ const MODELS = {
   copilot: { cheap: 'gpt-5.6-luna', balanced: 'claude-sonnet-5', strong: 'claude-opus-5' },
   claude:  { cheap: 'haiku',        balanced: 'sonnet',          strong: 'opus' }, // strong: 'fable' if your plan has it
 };
-// Frontmatter keys only Claude Code understands; dropped from the Copilot render.
-const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode'];
+// Frontmatter keys only Claude Code understands; dropped from the Copilot render, with any indented block under them.
+const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
+// Frontmatter keys only Copilot understands; dropped from the Claude render.
+const COPILOT_ONLY_KEYS = ['disable-model-invocation'];
+// Placeholder in agent bodies for the directory this install writes to; hook commands resolve through it.
+// A project-scope install is committed and shared, so it must resolve at runtime, not bake in this machine's path:
+// Claude Code exports CLAUDE_PROJECT_DIR (session root) and CLAUDE_PLUGIN_ROOT (plugin directory) to hook commands.
+const ROOT_VAR = '${AWAY_TEAM_ROOT}';
+const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
 const COPILOT_ONLY_DROP = ['ask'];
+// Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
+// ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
+// Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
+const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'] };
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
+const INVESTIGATOR = 'away-team-investigator'; // the read-only specialist hooks/readonly-guard.js is scoped to
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 const home = (...p) => path.join(os.homedir(), ...p);
+const list = (name) => (opt(name) || '').split(',').map((s) => s.trim()).filter(Boolean);
+// Every child gets a timeout and an empty stdin: a hung or stdin-reading install must not hang the installer.
+const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encoding: 'utf8', input: '', timeout, killSignal: 'SIGKILL' });
+// MCP servers to expose to every agent that carries a tool allowlist (--mcp github,mcp__jira__get_issue).
+// The Azure DevOps server (@azure-devops/mcp) is always in, under the names its own guide registers it as:
+// `ado` for Copilot CLI, `azure-devops` for Claude Code. Both platforms ignore an entry for a server that is not
+// configured, so the extra name costs nothing where it does not apply.
+const DEFAULT_MCP = ['ado', 'azure-devops'];
+const mcp = [...new Set([...DEFAULT_MCP, ...list('--mcp')])];
 // Root of the git repo we are running in, if any: enables project scope.
-const repoRoot = (() => { const r = spawnSync('git rev-parse --show-toplevel', { shell: true, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; })();
+const repoRoot = (() => { const r = run('git rev-parse --show-toplevel', 10000); return r.status === 0 ? r.stdout.trim() : null; })();
 
 const agents = fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.endsWith('.agent.md'));
 const skills = fs.readdirSync(path.join(ROOT, 'skills'));
@@ -41,26 +64,62 @@ const SPECIALIST = specialists.length ? new RegExp(`\\b(${specialists.map((n) =>
 
 // Parses `tools: ["agent(a, b)", "read"]` into [[alias, args|undefined], ...].
 const parseTools = (list) => [...list.matchAll(/"([^"]+)"/g)].map((x) => {
-  const m = x[1].match(/^([\w*]+)(?:\((.*)\))?$/);
+  const m = x[1].match(/^([\w*-]+)(?:\((.*)\))?$/);
   if (!m) throw new Error(`bad tools entry "${x[1]}": expected an alias like "read" or "agent(a, b)"`);
   return m.slice(1, 3);
 });
 
+// An MCP entry is a server name or a Claude tool name (mcp__<server>__<tool>); each platform spells them differently.
+// Claude Code: mcp__<server>__* for a whole server (subagent docs). Copilot: <server>/* or <server>/<tool>
+// (custom-agents-configuration); a bare server name is an unrecognised tool there and is silently ignored.
+const mcpTool = (e, platform) => {
+  const [server, tool] = e.replace(/^mcp__/, '').split('__');
+  if (platform === 'claude') return e.startsWith('mcp__') && tool ? e : `mcp__${server}__*`;
+  return `${server}/${tool || '*'}`;
+};
+
 // plugin: true renders for the Claude plugin (dist/claude), where delegation targets take the plugin prefix.
-function render(text, platform, { plugin = false } = {}) {
+// root is substituted for ${AWAY_TEAM_ROOT}: the plugin's own root for a plugin build, the install directory otherwise.
+function render(text, platform, { plugin = false, root = '.', file = 'agent' } = {}) {
   const scope = (n) => (plugin ? `${PLUGIN}:${n}` : n);
+  const bad = (msg) => { throw new Error(`${file}: ${msg}`); };
+  // A Claude-only key may open an indented block (hooks:); drop the whole block for Copilot.
+  let dropping = false;
   return text.split(/\r?\n/).map((line) => {
     let m;
-    if ((m = line.match(/^model: (\w+)$/))) return `model: ${MODELS[platform][m[1]]}`;
+    if (dropping) { if (/^\s+\S/.test(line)) return null; dropping = false; }
+    if ((m = line.match(/^model: (\w+)$/))) {
+      const model = MODELS[platform][m[1]];
+      if (!model) bad(`unknown model tier "${m[1]}": expected one of ${Object.keys(MODELS[platform]).join(', ')}`);
+      return `model: ${model}`;
+    }
+    if (platform === 'claude' && (m = line.match(/^skills: \[(.*)\]$/))) {
+      return `skills: [${parseTools(m[1]).map(([a]) => JSON.stringify(scope(a))).join(', ')}]`;
+    }
     if ((m = line.match(/^tools: \[(.*)\]$/))) {
       const entries = parseTools(m[1]);
+      for (const [a] of entries) {
+        if (a === '*' || a.startsWith('mcp__') || CLAUDE_TOOLS[a] || COPILOT_ONLY_DROP.includes(a)) continue;
+        bad(`unknown tool alias "${a}": expected one of ${Object.keys(CLAUDE_TOOLS).join(', ')}, or an mcp__<server> name`);
+      }
+      const extra = entries.some(([a]) => a === '*') ? [] : mcp.map((e) => mcpTool(e, platform));
       // Copilot has no agent allowlist syntax and ignores unknown tool names: bare aliases only.
-      if (platform === 'copilot') return `tools: [${entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a)).map(([a]) => JSON.stringify(a)).join(', ')}]`;
+      if (platform === 'copilot') {
+        const names = entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a))
+          .flatMap(([a]) => (a.startsWith('mcp__') ? [mcpTool(a, 'copilot')] : COPILOT_TOOLS[a] || [a]));
+        return `tools: [${[...new Set([...names, ...extra])].map((a) => JSON.stringify(a)).join(', ')}]`;
+      }
       if (entries.some(([a]) => a === '*')) return null;
       // `agent(a, b)` is an allowlist: only those subagents can be spawned (main-thread agents only; ignored in a subagent).
-      return `tools: ${entries.map(([a, args]) => (a === 'agent' && args ? `Agent(${args.split(/\s*,\s*/).map(scope).join(', ')})` : CLAUDE_TOOLS[a])).join(', ')}`;
+      const names = entries.map(([a, args]) => (a === 'agent' && args ? `Agent(${args.split(/\s*,\s*/).map(scope).join(', ')})`
+        : a.startsWith('mcp__') ? a : CLAUDE_TOOLS[a]));
+      return `tools: ${[...new Set([...names, ...extra])].join(', ')}`;
     }
-    if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) return null;
+    if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) { dropping = line.trim().endsWith(':'); return null; }
+    // Claude Code ignores (and warns about) frontmatter hooks on plugin agents; the plugin wires them from hooks/hooks.json.
+    if (plugin && line.startsWith('hooks:')) { dropping = true; return null; }
+    if (platform === 'claude' && COPILOT_ONLY_KEYS.some((k) => line.startsWith(`${k}:`))) return null;
+    if (line.includes(ROOT_VAR)) line = line.split(ROOT_VAR).join(root);
     if (plugin && SPECIALIST && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
     return line;
   }).filter((l) => l !== null).join('\n');
@@ -71,13 +130,21 @@ function emit(platform, dest, opts = {}) {
   fs.mkdirSync(path.join(dest, 'agents'), { recursive: true });
   for (const f of agents) {
     const out = platform === 'copilot' ? f : f.replace(/\.agent\.md$/, '.md');
-    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform, opts));
+    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f }));
   }
   fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
+  // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
+  if (platform === 'claude') fs.cpSync(path.join(ROOT, 'hooks'), path.join(dest, 'hooks'), { recursive: true });
+  // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
+  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
+  if (opts.plugin) {
+    const hooks = { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
+    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), JSON.stringify({ hooks }, null, 2) + '\n');
+  }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
     // that invokes it, so it removes every tool the orchestrator's allowlist leaves out; the rest is prose.
-    const rendered = render(read(`${ORCHESTRATOR}.agent.md`), 'claude', opts);
+    const rendered = render(read(`${ORCHESTRATOR}.agent.md`), 'claude', { ...opts, file: `${ORCHESTRATOR}.agent.md` });
     const desc = rendered.match(/^description: (.*)$/m)[1];
     const model = rendered.match(/^model: (.*)$/m)[1];
     const tools = rendered.match(/^tools: (.*)$/m); // absent when the agent has every tool
@@ -121,7 +188,7 @@ function setInstructionLine(file, level) {
 // True when a real CLI is on PATH. Resolved with where/command -v rather than executed: the Claude and Copilot
 // desktop apps from the Microsoft Store register execution aliases under WindowsApps, and running one opens the app.
 function has(cli) {
-  const r = spawnSync(process.platform === 'win32' ? `where ${cli}` : `command -v ${cli}`, { shell: true, encoding: 'utf8' });
+  const r = run(process.platform === 'win32' ? `where ${cli}` : `command -v ${cli}`, 10000);
   const hits = (r.stdout || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/WindowsApps/i.test(l));
   return r.status === 0 && hits.length > 0;
 }
@@ -135,9 +202,12 @@ const detect = () => ({
 // Runs a command, capturing output. "already" = the marketplace or plugin was present, which is fine.
 const ALREADY = /already (registered|installed|exists|added)/i;
 function sh(cmd) {
-  const r = spawnSync(cmd, { encoding: 'utf8', shell: true });
-  const out = ((r.stdout || '') + (r.stderr || '')).trim();
-  return { ok: r.status === 0, already: r.status !== 0 && ALREADY.test(out), out };
+  const r = run(cmd);
+  const timedOut = r.error && (r.error.code === 'ETIMEDOUT' || r.signal === 'SIGKILL');
+  const note = timedOut ? `timed out after ${TIMEOUT_MS / 1000}s and was killed` : r.error ? r.error.message : '';
+  const out = [(r.stdout || '') + (r.stderr || ''), note].join('\n').trim();
+  const ok = !r.error && r.status === 0;
+  return { ok, already: !ok && !timedOut && ALREADY.test(out), out };
 }
 
 const PLUGINS = {
@@ -164,9 +234,9 @@ if (flag('--build')) {
     name: PLUGIN, version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
-  emit('copilot', path.join(dist, 'copilot'));
+  emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}' });
   fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2) + '\n');
-  emit('claude', path.join(dist, 'claude'), { plugin: true });
+  emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}' });
   fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
   fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), JSON.stringify(meta, null, 2) + '\n');
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
@@ -278,7 +348,8 @@ const BANNER = `
   const manual = [];
   for (const t of targets) {
     const dest = destFor(t);
-    emit(t, dest);
+    // Absolute for a global install, portable for a project install: teammates check the repo out elsewhere.
+    emit(t, dest, { root: scope === 'project' ? '${CLAUDE_PROJECT_DIR}/.claude' : dest });
     p.log.success(`${t === 'copilot' ? 'GitHub Copilot' : 'Claude Code'}: agents and skills → ${dest}`);
     if (t === 'copilot' && companions.includes('caveman')) setInstructionLine(home('.copilot', 'copilot-instructions.md'), level);
 
