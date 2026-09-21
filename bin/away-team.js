@@ -6,10 +6,10 @@
 //   --no-mcp                                          skip MCP entirely (isolation, not cost: a tool name is ~11 tokens)
 //   node bin/away-team.js --build                     render dist/copilot and dist/claude for the plugin marketplaces
 // Agents carry a model tier (cheap | balanced | strong); MODELS resolves it per platform.
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const pkg = require('../package.json');
@@ -118,14 +118,17 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
   return text.split(/\r?\n/).map((line) => {
     let m;
     if (dropping) { if (/^\s+\S/.test(line)) return null; dropping = false; }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if ((m = line.match(/^model: (\w+)$/))) {
       const model = MODELS[platform][m[1]];
       if (!model) bad(`unknown model tier "${m[1]}": expected one of ${Object.keys(MODELS[platform]).join(', ')}`);
       return `model: ${model}`;
     }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if (platform === 'claude' && (m = line.match(/^skills: \[(.*)\]$/))) {
       return `skills: [${parseTools(m[1]).map(([a]) => JSON.stringify(scope(a))).join(', ')}]`;
     }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if ((m = line.match(/^tools: \[(.*)\]$/))) {
       const entries = parseTools(m[1]);
       for (const [a] of entries) {
@@ -169,7 +172,7 @@ function emit(platform, dest, opts = {}) {
   // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
   if (opts.plugin) {
     const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
-    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), JSON.stringify({ hooks }, null, 2) + '\n');
+    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`);
   }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
@@ -201,7 +204,7 @@ function setDefaultMode(name, level) {
   try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
   cfg.defaultMode = level;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+  fs.writeFileSync(file, `${JSON.stringify(cfg, null, 2)}\n`);
 }
 
 // Caveman on Copilot is skill-only (no hooks), so its default level has to come from personal instructions.
@@ -269,10 +272,10 @@ if (flag('--build')) {
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
   emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
-  fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2) + '\n');
+  fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), `${JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2)}\n`);
   emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
   fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
-  fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), JSON.stringify(meta, null, 2) + '\n');
+  fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), `${JSON.stringify(meta, null, 2)}\n`);
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
   process.exit(0);
 }

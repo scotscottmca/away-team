@@ -7,14 +7,25 @@ on:
     branches: [main]
 permissions:
   contents: read
+# A newer push supersedes this run; nothing here has a side effect worth finishing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor package.json declares, plus the newer lines. 20.19 is where require(esm) landed,
+        # which the ESM-only @clack/prompts needs; 18 and 20.0 fail outright, checked on both.
+        node: ['20.19.0', '22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
       # The install tests run bin/away-team.js, which needs @clack/prompts and picocolors.
       - run: npm ci
       # Rebuilds dist/ and asserts over it, including that dist/ matches what is committed.

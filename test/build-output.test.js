@@ -2,9 +2,9 @@
 // Run by `npm test`, which builds first; publish.yml runs it before `npm publish`.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const { execFileSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const MODELS = {
@@ -60,7 +60,7 @@ test('the Copilot render names the CLI search tools', () => {
   // name grep and glob, or it searches through bash only.
   for (const a of agentFiles('copilot')) {
     const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
-    if (!m || !m[1].includes('"search"')) continue;
+    if (!m?.[1].includes('"search"')) continue;
     assert.ok(m[1].includes('"grep"') && m[1].includes('"glob"'), `copilot/${a.name}: search without grep and glob`);
   }
 });
@@ -147,7 +147,7 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
 });
 
 test('an install gives the whole crew every MCP server the machine has', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-discover-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-discover-'));
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home, { recursive: true });
   // Both shapes Claude Code stores servers in: user scope at the top level, local scope under the project.
@@ -160,7 +160,7 @@ test('an install gives the whole crew every MCP server the machine has', () => {
     { cwd: tmp, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
 
   install();
-  const agentsOf = (t, ext) => fs.readdirSync(path.join(home, t, 'agents'))
+  const agentsOf = (t, _ext) => fs.readdirSync(path.join(home, t, 'agents'))
     .map((f) => ({ name: f, tools: (fs.readFileSync(path.join(home, t, 'agents', f), 'utf8').match(/^tools: (.*)$/m) || [])[1] }));
   for (const { name, tools } of agentsOf('.claude')) {
     assert.ok(tools, `claude/${name} has no tools line, so it inherits every tool`);
@@ -179,7 +179,7 @@ test('an install gives the whole crew every MCP server the machine has', () => {
 
 test('a build never bakes in the building machine\'s MCP servers', () => {
   // dist/ is committed and shared with everyone who installs the plugin, so it carries the defaults and nothing local.
-  const home = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-buildhome-'));
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-buildhome-'));
   fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({
     mcpServers: { 'local-only-server': { type: 'stdio', command: 'echo', args: ['hi'] } } }));
   execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--build'],
@@ -199,7 +199,7 @@ test('dist matches a fresh build', () => {
 });
 
 test('an install writes a hook path that resolves on the target machine', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-'));
   const home = path.join(tmp, 'home');
   const repo = path.join(tmp, 'repo');
   fs.mkdirSync(home, { recursive: true });
@@ -225,7 +225,7 @@ test('an install writes a hook path that resolves on the target machine', () => 
 });
 
 test('--mcp spells the server the way each platform reads it', () => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-mcp-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-mcp-'));
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home, { recursive: true });
   execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--yes', '--target', 'all', '--scope', 'global', '--skip-plugins',
@@ -277,7 +277,7 @@ test('each specialist names its own turn cap, so the prose cannot drift from the
 // Runs a build from a throwaway copy of the repo, so a deliberately broken agent never touches the real
 // tree. `--build` exits before the installer requires @clack/prompts, so the copy needs no node_modules.
 const buildCopy = (mutate) => {
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-build-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-build-'));
   for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
   fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
   mutate(tmp);
@@ -329,7 +329,7 @@ test('the web session hook parses, stays silent off the remote, and is wired to 
   // That early exit is trivially silent, so drive the real path too. Stubs on PATH shout on both streams:
   // anything the script does not route through its quiet() helper lands in the session's context, and a
   // failure must still surface rather than being swallowed with it.
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-hook-'));
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-hook-'));
   const stubs = path.join(tmp, 'stubs');
   fs.mkdirSync(stubs);
   // Per command, so each step is covered on its own: a stub that fails first would otherwise mask the ones after it.
