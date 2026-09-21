@@ -2,6 +2,7 @@
 name: away-team-mapper
 description: Trawls a solution and writes docs/CODEMAP.md (entry points, module boundaries, data flow, invariants, verified build/test commands) so investigator and basher can navigate without re-reading the repo. Run once per repo, then refresh. Returns a Map report or a Blocked report.
 tools: ["read", "search", "execute", "edit"]
+skills: ["codemap"]
 model: cheap
 maxTurns: 50
 ---

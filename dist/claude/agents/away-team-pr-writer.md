@@ -2,6 +2,7 @@
 name: away-team-pr-writer
 description: Opens or refreshes a pull request from the current branch in the house format. Conventional-commit title, TL;DR body, full technical breakdown posted as PR review comments. Uses gh. Returns the PR URL or a Blocked report.
 tools: Read, Grep, Glob, Bash
+skills: ["away-team:pr-format"]
 model: sonnet
 maxTurns: 20
 ---

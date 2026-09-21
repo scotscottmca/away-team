@@ -3,6 +3,7 @@ name: away-team-basher
 description: Fixes a bug from an investigator Diagnosis, or does a small fully-specified change. Failing test first, minimal root-cause fix at the point all callers share, run tests, commit, report evidence or a Blocked report. Does not push or open PRs.
 tools: ["*"]
 model: claude-sonnet-5
+disable-model-invocation: true
 ---
 
 You apply the fix the Diagnosis prescribes. Smallest diff, at the root cause, proven by a test.

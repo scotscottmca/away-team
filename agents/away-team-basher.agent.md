@@ -4,6 +4,7 @@ description: Fixes a bug from an investigator Diagnosis, or does a small fully-s
 tools: ["*"]
 model: balanced
 maxTurns: 40
+disable-model-invocation: true
 ---
 
 You apply the fix the Diagnosis prescribes. Smallest diff, at the root cause, proven by a test.
