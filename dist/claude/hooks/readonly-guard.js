@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-// PreToolUse hook for away-team-investigator: makes "read-only" an enforced constraint, not a convention.
-// The investigator's tool list already excludes Edit/Write, but `execute` renders to Bash, and Bash can write
-// (`>`, `sed -i`, `git commit`). This blocks write-shaped Bash outside the system temp directory, and write-shaped
-// MCP tool calls: the crew gets every MCP server the machine has, and a server that can read a work item can
-// usually also create one.
-// Wired from the agent's `hooks:` frontmatter on an npx install. Claude Code ignores frontmatter hooks on plugin
-// agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with `--agent <name>`: the guard then
-// enforces only when the hook input's agent_type is that agent (bare, or <plugin>:<name>) and exits 0 otherwise.
-// Exits 2 with a reason on stderr to deny the call.
+// PreToolUse hook for away-team-investigator and away-team (the orchestrator): makes "read-only" an enforced
+// constraint, not a convention. The investigator's tool list already excludes Edit/Write, and the orchestrator's
+// `execute` is meant for orienting reads only, but `execute` renders to Bash, and Bash can write (`>`, `sed -i`,
+// `git commit`). This blocks write-shaped Bash outside the system temp directory, and write-shaped MCP tool calls:
+// the crew gets every MCP server the machine has, and a server that can read a work item can usually also create one.
+// Wired from each agent's own `hooks:` frontmatter on an npx install. Claude Code ignores frontmatter hooks on
+// plugin agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with one `--agent <name>` per
+// guarded agent: the guard then enforces only when the hook input's agent_type matches one of those (bare, or
+// <plugin>:<name>) and exits 0 otherwise. Exits 2 with a reason on stderr to deny the call.
 const os = require('node:os');
 const path = require('node:path');
 
-const ONLY_AGENT = process.argv.includes('--agent') ? process.argv[process.argv.indexOf('--agent') + 1] : null;
-const isOnlyAgent = (t) => !!t && (t === ONLY_AGENT || t.endsWith(`:${ONLY_AGENT}`));
+// --agent may repeat (one per guarded agent, e.g. the investigator and the orchestrator); collect every value.
+const GUARDED_AGENTS = process.argv.reduce((acc, a, i) => (process.argv[i - 1] === '--agent' ? [...acc, a] : acc), []);
+const guardedAgent = (t) => (t && GUARDED_AGENTS.find((n) => t === n || t.endsWith(`:${n}`))) || null;
 
 const TMP = [os.tmpdir(), '/tmp', '/var/tmp', process.env.TMPDIR, process.env.TEMP, process.env.TMP]
   .filter(Boolean).map((d) => path.resolve(d));
@@ -78,17 +79,28 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
   let why = null;
+  let who = 'away-team-investigator'; // fallback for the rare case agent_type is absent entirely
   try {
     const hook = JSON.parse(input || '{}');
-    if (ONLY_AGENT && !isOnlyAgent(hook.agent_type)) process.exit(0);
+    if (GUARDED_AGENTS.length) {
+      const match = guardedAgent(hook.agent_type);
+      if (!match) process.exit(0);
+      who = match;
+    } else if (hook.agent_type) {
+      who = hook.agent_type.replace(/^.*:/, ''); // frontmatter wiring: no --agent, but the agent's own name is on the hook input
+    }
     const name = hook.tool_name || '';
     why = /^mcp__/.test(name) || name.includes('/') ? mcpViolation(name)
       : violation(hook.tool_input?.command || '');
   } catch { process.exit(0); }
   if (!why) process.exit(0);
+  // The orchestrator never writes a Diagnosis; it beams the basher down instead of applying anything itself.
+  const advice = who === 'away-team'
+    ? 'Report the change and beam down away-team-basher to apply it.'
+    : 'Diagnose, do not patch: report the change in your Diagnosis and let away-team-basher apply it.';
   process.stderr.write(
-    `away-team-investigator is read-only: ${why}. Blocked.\n` +
-    'Diagnose, do not patch: report the change in your Diagnosis and let away-team-basher apply it. ' +
+    `${who} is read-only: ${why}. Blocked.\n` +
+    `${advice} ` +
     'Reading through any MCP server is fine; changing anything through one is not. ' +
     'Throwaway scripts and scratch output belong under the system temp directory.\n');
   process.exit(2);
