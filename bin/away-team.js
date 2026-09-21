@@ -17,8 +17,11 @@ const MODELS = {
 };
 // Frontmatter keys only Claude Code understands; dropped from the Copilot render.
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode'];
-const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write', todo: 'TodoWrite', web: 'WebFetch, WebSearch' };
+// Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
+const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
+const COPILOT_ONLY_DROP = ['ask'];
 const LEVELS = ['lite', 'full', 'ultra'];
+const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -27,38 +30,57 @@ const home = (...p) => path.join(os.homedir(), ...p);
 // Root of the git repo we are running in, if any: enables project scope.
 const repoRoot = (() => { const r = spawnSync('git rev-parse --show-toplevel', { shell: true, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; })();
 
-function render(text, platform) {
+const agents = fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.endsWith('.agent.md'));
+const skills = fs.readdirSync(path.join(ROOT, 'skills'));
+const read = (f) => fs.readFileSync(path.join(ROOT, 'agents', f), 'utf8');
+// Specialist names the orchestrator delegates to. In the Claude plugin render they become <plugin>:<name>,
+// the scoped identifier plugin agents register under; the npx install keeps bare names.
+const specialists = agents.map((f) => f.replace(/\.agent\.md$/, '')).filter((n) => n !== PLUGIN);
+const SPECIALIST = new RegExp(`\\b(${specialists.join('|')})\\b`, 'g');
+
+// Parses `tools: ["agent(a, b)", "read"]` into [[alias, args|undefined], ...].
+const parseTools = (list) => [...list.matchAll(/"([^"]+)"/g)].map((x) => x[1].match(/^([\w*]+)(?:\((.*)\))?$/).slice(1, 3));
+
+// plugin: true renders for the Claude plugin (dist/claude), where delegation targets take the plugin prefix.
+function render(text, platform, { plugin = false } = {}) {
+  const scope = (n) => (plugin ? `${PLUGIN}:${n}` : n);
   return text.split(/\r?\n/).map((line) => {
     let m;
     if ((m = line.match(/^model: (\w+)$/))) return `model: ${MODELS[platform][m[1]]}`;
-    if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) return null;
-    if (platform === 'claude' && (m = line.match(/^tools: \[(.*)\]$/))) {
-      const names = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-      return names.includes('*') ? null : `tools: ${names.map((n) => CLAUDE_TOOLS[n]).join(', ')}`;
+    if ((m = line.match(/^tools: \[(.*)\]$/))) {
+      const entries = parseTools(m[1]);
+      // Copilot has no agent allowlist syntax and ignores unknown tool names: bare aliases only.
+      if (platform === 'copilot') return `tools: [${entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a)).map(([a]) => JSON.stringify(a)).join(', ')}]`;
+      if (entries.some(([a]) => a === '*')) return null;
+      // `agent(a, b)` is an allowlist: only those subagents can be spawned (main-thread agents only; ignored in a subagent).
+      return `tools: ${entries.map(([a, args]) => (a === 'agent' && args ? `Agent(${args.split(/\s*,\s*/).map(scope).join(', ')})` : CLAUDE_TOOLS[a])).join(', ')}`;
     }
+    if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) return null;
+    if (plugin && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
     return line;
   }).filter((l) => l !== null).join('\n');
 }
 
-const agents = fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.endsWith('.agent.md'));
-const skills = fs.readdirSync(path.join(ROOT, 'skills'));
-const read = (f) => fs.readFileSync(path.join(ROOT, 'agents', f), 'utf8');
-
 // Writes agents/ and skills/ under dest in the platform's format.
-function emit(platform, dest) {
+function emit(platform, dest, opts = {}) {
   fs.mkdirSync(path.join(dest, 'agents'), { recursive: true });
   for (const f of agents) {
     const out = platform === 'copilot' ? f : f.replace(/\.agent\.md$/, '.md');
-    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform));
+    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform, opts));
   }
   fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
-    const raw = read('away-team.agent.md');
-    const desc = raw.match(/^description: (.*)$/m)[1];
-    const body = raw.split(/^---\r?\n/m)[2];
-    const dir = path.join(dest, 'skills', 'away-team');
+    // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
+    // that invokes it, so it removes every tool the orchestrator's allowlist leaves out; the rest is prose.
+    const rendered = render(read(`${PLUGIN}.agent.md`), 'claude', opts);
+    const desc = rendered.match(/^description: (.*)$/m)[1];
+    const model = rendered.match(/^model: (.*)$/m)[1];
+    const allowed = rendered.match(/^tools: (.*)$/m)[1].replace(/\([^)]*\)/g, '').split(', ');
+    const disallowed = Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t));
+    const body = rendered.split(/^---\r?\n/m)[2];
+    const dir = path.join(dest, 'skills', PLUGIN);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: away-team\ndescription: ${desc}\n---\n\n${body}`);
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${PLUGIN}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`);
   }
 }
 
@@ -138,7 +160,7 @@ if (flag('--build')) {
   };
   emit('copilot', path.join(dist, 'copilot'));
   fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2) + '\n');
-  emit('claude', path.join(dist, 'claude'));
+  emit('claude', path.join(dist, 'claude'), { plugin: true });
   fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
   fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), JSON.stringify(meta, null, 2) + '\n');
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
