@@ -153,8 +153,8 @@ test('--mcp spells the server the way each platform reads it', () => {
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
     'Read, Grep, Glob, Bash, mcp__azure-devops__*, mcp__github__get_issue');
-  // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. A bare server name is ignored there,
-  // checked live: the investigator's tool list came back without the server.
+  // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
+  // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
     '["read", "search", "execute", "azure-devops/*", "github/get_issue"]');
   // Basher inherits every tool and gets no entry.
