@@ -22,6 +22,7 @@ const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execu
 const COPILOT_ONLY_DROP = ['ask'];
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
+const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -35,11 +36,15 @@ const skills = fs.readdirSync(path.join(ROOT, 'skills'));
 const read = (f) => fs.readFileSync(path.join(ROOT, 'agents', f), 'utf8');
 // Specialist names the orchestrator delegates to. In the Claude plugin render they become <plugin>:<name>,
 // the scoped identifier plugin agents register under; the npx install keeps bare names.
-const specialists = agents.map((f) => f.replace(/\.agent\.md$/, '')).filter((n) => n !== PLUGIN);
-const SPECIALIST = new RegExp(`\\b(${specialists.join('|')})\\b`, 'g');
+const specialists = agents.map((f) => f.replace(/\.agent\.md$/, '')).filter((n) => n !== ORCHESTRATOR);
+const SPECIALIST = specialists.length ? new RegExp(`\\b(${specialists.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'g') : null;
 
 // Parses `tools: ["agent(a, b)", "read"]` into [[alias, args|undefined], ...].
-const parseTools = (list) => [...list.matchAll(/"([^"]+)"/g)].map((x) => x[1].match(/^([\w*]+)(?:\((.*)\))?$/).slice(1, 3));
+const parseTools = (list) => [...list.matchAll(/"([^"]+)"/g)].map((x) => {
+  const m = x[1].match(/^([\w*]+)(?:\((.*)\))?$/);
+  if (!m) throw new Error(`bad tools entry "${x[1]}": expected an alias like "read" or "agent(a, b)"`);
+  return m.slice(1, 3);
+});
 
 // plugin: true renders for the Claude plugin (dist/claude), where delegation targets take the plugin prefix.
 function render(text, platform, { plugin = false } = {}) {
@@ -56,7 +61,7 @@ function render(text, platform, { plugin = false } = {}) {
       return `tools: ${entries.map(([a, args]) => (a === 'agent' && args ? `Agent(${args.split(/\s*,\s*/).map(scope).join(', ')})` : CLAUDE_TOOLS[a])).join(', ')}`;
     }
     if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) return null;
-    if (plugin && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
+    if (plugin && SPECIALIST && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
     return line;
   }).filter((l) => l !== null).join('\n');
 }
@@ -72,15 +77,16 @@ function emit(platform, dest, opts = {}) {
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
     // that invokes it, so it removes every tool the orchestrator's allowlist leaves out; the rest is prose.
-    const rendered = render(read(`${PLUGIN}.agent.md`), 'claude', opts);
+    const rendered = render(read(`${ORCHESTRATOR}.agent.md`), 'claude', opts);
     const desc = rendered.match(/^description: (.*)$/m)[1];
     const model = rendered.match(/^model: (.*)$/m)[1];
-    const allowed = rendered.match(/^tools: (.*)$/m)[1].replace(/\([^)]*\)/g, '').split(', ');
+    const tools = rendered.match(/^tools: (.*)$/m); // absent when the agent has every tool
+    const allowed = tools ? tools[1].replace(/\([^)]*\)/g, '').split(', ') : Object.values(CLAUDE_TOOLS).join(', ').split(', ');
     const disallowed = Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t));
     const body = rendered.split(/^---\r?\n/m)[2];
-    const dir = path.join(dest, 'skills', PLUGIN);
+    const dir = path.join(dest, 'skills', ORCHESTRATOR);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${PLUGIN}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`);
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`);
   }
 }
 
@@ -155,7 +161,7 @@ if (flag('--build')) {
   const dist = path.join(ROOT, 'dist');
   fs.rmSync(dist, { recursive: true, force: true });
   const meta = {
-    name: pkg.name.split('/').pop(), version: pkg.version, description: pkg.description, author: pkg.author,
+    name: PLUGIN, version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
   emit('copilot', path.join(dist, 'copilot'));
@@ -256,7 +262,7 @@ const BANNER = `
   for (const t of targets) {
     const dir = scope === 'project' ? destFor(t) : (t === 'copilot' ? '~/.copilot' : '~/.claude');
     rows.push(c.cyan(`${dir}/agents`), `  ${agents.length} agents: ${agents.map((a) => a.replace(/\.agent\.md$/, '')).join(', ')}`);
-    rows.push(c.cyan(`${dir}/skills`), `  ${skills.join(', ')}${t === 'claude' ? ', away-team' : ''}`);
+    rows.push(c.cyan(`${dir}/skills`), `  ${skills.join(', ')}${t === 'claude' ? `, ${ORCHESTRATOR}` : ''}`);
     for (const name of companions) rows.push(c.cyan(`${name} → ${t}`), ...PLUGINS[t][name].map((x) => `  ${c.dim(x)}`));
     rows.push('');
   }

@@ -39,7 +39,7 @@ Full pipeline for "here is a bug, fix it": away-team:away-team-mapper (only if n
 
 - Show the Diagnosis summary (four lines, see Handoffs) and stop before basher when confidence is below high, the fix touches auth / crypto / billing / data migration, or the user did not ask for a fix.
 - Confirm with the user before pr-writer pushes or opens a PR.
-- You must be the main thread, selected by the user. On Claude Code, no `AskUserQuestion` tool means you were delegated to as a subagent, where these gates cannot fire: do nothing, and return `## Blocked` (stage: dispatch; reason: away-team was delegated to as a subagent; needs: run it as the main thread with `claude --agent away-team`, `/away-team`, or the `agent` setting).
+- You must be the main thread, selected by the user. If you are running as a subagent (the harness says so; on Claude Code you then also lack the `AskUserQuestion` tool an interactive main thread has), these gates cannot fire: do nothing, and return `## Blocked` (stage: dispatch; reason: away-team was delegated to as a subagent; needs: run it as the main thread with `claude --agent away-team`, `/away-team`, or the `agent` setting).
 - A specialist that returns `## Blocked`, or cannot be reached at all (unknown agent, tool missing, dispatch error), ends the pipeline. Relay four lines of your own: stage, reason, side effects, what it needs. Do not re-run it, and never do its work yourself: you have no tools for it, and every orchestrator that tried produced a wrong change in the wrong place.
 
 ## Handoffs
