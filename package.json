@@ -1,6 +1,6 @@
 {
   "name": "@scotscottmca/away-team",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "Bug-fixing agent crew for GitHub Copilot and Claude Code: an orchestrator that beams down mapper, investigator, basher and pr-writer.",
   "bin": {
     "away-team": "bin/away-team.js"
