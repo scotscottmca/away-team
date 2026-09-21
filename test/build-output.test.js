@@ -177,6 +177,21 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
     'mcp__jira__deleteIssue', 'mcp__x__createOrUpdateFile', 'ado/repo_update_pull_request']) {
     assert.strictEqual(probeTool(t), 2, `guard allowed the write-shaped MCP tool ${t}`);
   }
+  // Filing an issue is the one write a guarded agent may make, so a finding it is not here to fix reaches the
+  // tracker. Creating one only: commenting, closing and editing stay denied, and so does an ADO work item.
+  for (const c of ['gh issue create --title x --body-file /tmp/x.md', 'gh issue create -t x -b y']) {
+    assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
+  }
+  for (const c of ['gh issue close 5', 'gh issue comment 5 -b x', 'gh issue edit 5 -t x', 'gh pr create -t x']) {
+    assert.strictEqual(probe(c), 2, `guard allowed "${c}"`);
+  }
+  for (const t of ['mcp__github__create_issue', 'mcp__jira__createIssue', 'github/create_issue']) {
+    assert.strictEqual(probeTool(t), 0, `guard blocked the issue-filing MCP tool ${t}`);
+  }
+  // A multi-method tool is allowed only on the method that files.
+  const method = (m) => probe('', [], { tool_name: 'mcp__github__issue_write', tool_input: { method: m } });
+  assert.strictEqual(method('create'), 0, 'guard blocked issue_write create');
+  assert.strictEqual(method('update'), 2, 'guard allowed issue_write update');
 });
 
 test('an install gives the whole crew every MCP server the machine has', () => {
