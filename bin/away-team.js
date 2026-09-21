@@ -60,9 +60,14 @@ const parseTools = (list) => [...list.matchAll(/"([^"]+)"/g)].map((x) => {
   return m.slice(1, 3);
 });
 
-// An MCP entry is either a server name or a full Claude tool name; each platform names them differently.
-const mcpServer = (e) => e.replace(/^mcp__/, '').split('__')[0];
-const mcpTool = (e, platform) => (platform === 'claude' ? (e.startsWith('mcp__') ? e : `mcp__${e}__*`) : mcpServer(e));
+// An MCP entry is a server name or a Claude tool name (mcp__<server>__<tool>); each platform spells them differently.
+// Claude Code: mcp__<server>__* for a whole server (subagent docs). Copilot: <server>/* or <server>/<tool>
+// (custom-agents-configuration); a bare server name is an unrecognised tool there and is silently ignored.
+const mcpTool = (e, platform) => {
+  const [server, tool] = e.replace(/^mcp__/, '').split('__');
+  if (platform === 'claude') return e.startsWith('mcp__') && tool ? e : `mcp__${server}__*`;
+  return `${server}/${tool || '*'}`;
+};
 
 // plugin: true renders for the Claude plugin (dist/claude), where delegation targets take the plugin prefix.
 // root is substituted for ${AWAY_TEAM_ROOT}: the plugin's own root for a plugin build, the install directory otherwise.
@@ -91,7 +96,7 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent' } =
       const extra = entries.some(([a]) => a === '*') ? [] : mcp.map((e) => mcpTool(e, platform));
       // Copilot has no agent allowlist syntax and ignores unknown tool names: bare aliases only.
       if (platform === 'copilot') {
-        const names = entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a)).map(([a]) => (a.startsWith('mcp__') ? mcpServer(a) : a));
+        const names = entries.filter(([a]) => !COPILOT_ONLY_DROP.includes(a)).map(([a]) => (a.startsWith('mcp__') ? mcpTool(a, 'copilot') : a));
         return `tools: [${[...new Set([...names, ...extra])].map((a) => JSON.stringify(a)).join(', ')}]`;
       }
       if (entries.some(([a]) => a === '*')) return null;

@@ -142,3 +142,22 @@ test('an install writes a hook path that resolves on the target machine', () => 
     `global install hook path is not absolute:\n${global.match(/command: .*/)}`);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+test('--mcp spells the server the way each platform reads it', () => {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'away-team-mcp-'));
+  const home = path.join(tmp, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  execFileSync('node', [path.join(ROOT, 'bin', 'away-team.js'), '--yes', '--target', 'all', '--scope', 'global', '--skip-plugins',
+    '--mcp', 'azure-devops,mcp__github__get_issue'], { cwd: tmp, env: { ...process.env, HOME: home, USERPROFILE: home }, stdio: 'pipe' });
+  const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
+  // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
+  assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
+    'Read, Grep, Glob, Bash, mcp__azure-devops__*, mcp__github__get_issue');
+  // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. A bare server name is ignored there,
+  // checked live: the investigator's tool list came back without the server.
+  assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
+    '["read", "search", "execute", "azure-devops/*", "github/get_issue"]');
+  // Basher inherits every tool and gets no entry.
+  assert.ok(!fs.readFileSync(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md'), 'utf8').includes('azure-devops'));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
