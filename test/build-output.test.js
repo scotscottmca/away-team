@@ -173,10 +173,30 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
     'mcp__jira__searchIssues', 'ado/wit_get_work_item']) {
     assert.strictEqual(probeTool(t), 0, `guard blocked the read-only MCP tool ${t}`);
   }
-  for (const t of ['mcp__ado__wit_create_work_item', 'mcp__ado__repo_update_pull_request', 'mcp__github__add_issue_comment',
+  for (const t of ['mcp__ado__wit_update_work_item', 'mcp__ado__repo_update_pull_request', 'mcp__github__add_issue_comment',
     'mcp__jira__deleteIssue', 'mcp__x__createOrUpdateFile', 'ado/repo_update_pull_request']) {
     assert.strictEqual(probeTool(t), 2, `guard allowed the write-shaped MCP tool ${t}`);
   }
+  // Filing an issue or a work item is the one write a guarded agent may make, so a finding it is not here to fix
+  // reaches the tracker. Creating one only: commenting on, closing and editing one stay denied.
+  for (const c of ['gh issue create --title x --body-file /tmp/x.md', 'gh issue create -t x -b y']) {
+    assert.strictEqual(probe(c), 0, `guard blocked "${c}"`);
+  }
+  for (const c of ['gh issue close 5', 'gh issue comment 5 -b x', 'gh issue edit 5 -t x', 'gh pr create -t x']) {
+    assert.strictEqual(probe(c), 2, `guard allowed "${c}"`);
+  }
+  for (const t of ['mcp__github__create_issue', 'mcp__jira__createIssue', 'github/create_issue',
+    'mcp__ado__wit_create_work_item', 'ado/wit_create_work_item']) {
+    assert.strictEqual(probeTool(t), 0, `guard blocked the issue-filing MCP tool ${t}`);
+  }
+  // The name must end at the create: a comment on a new work item is still a comment.
+  for (const t of ['mcp__ado__wit_create_work_item_comment', 'mcp__ado__wit_add_work_item_comment']) {
+    assert.strictEqual(probeTool(t), 2, `guard allowed the write-shaped MCP tool ${t}`);
+  }
+  // A multi-method tool is allowed only on the method that files.
+  const method = (m) => probe('', [], { tool_name: 'mcp__github__issue_write', tool_input: { method: m } });
+  assert.strictEqual(method('create'), 0, 'guard blocked issue_write create');
+  assert.strictEqual(method('update'), 2, 'guard allowed issue_write update');
 });
 
 test('an install gives the whole crew every MCP server the machine has', () => {

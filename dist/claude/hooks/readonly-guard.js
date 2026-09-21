@@ -4,6 +4,8 @@
 // `execute` is meant for orienting reads only, but `execute` renders to Bash, and Bash can write (`>`, `sed -i`,
 // `git commit`). This blocks write-shaped Bash outside the system temp directory, and write-shaped MCP tool calls:
 // the crew gets every MCP server the machine has, and a server that can read a work item can usually also create one.
+// One exception, on both paths: filing an issue or a work item is allowed, so a finding neither agent is here to fix
+// reaches the tracker instead of dying in a transcript. See FILE_ISSUE.
 // Wired from each agent's own `hooks:` frontmatter on an npx install. Claude Code ignores frontmatter hooks on
 // plugin agents, so the plugin wires it from hooks/hooks.json instead, session-wide, with one `--agent <name>` per
 // guarded agent: the guard then enforces only when the hook input's agent_type matches one of those (bare, or
@@ -57,6 +59,7 @@ function violation(cmd) {
     }
     if (cmd0 === 'gh' && args.length && GH_WRITE.test(args[0]) && !(args[1] && GH_READ.test(args[1]))) {
       if (args[0] === 'api' && !rest.some((f) => /^(-X|--method)$/.test(f))) continue; // GET by default
+      if (args[0] === 'issue' && args[1] === 'create') continue; // filing a finding, see FILE_ISSUE
       return `${`gh ${args[0]} ${args[1] || ''}`.trim()} writes to GitHub`;
     }
   }
@@ -66,11 +69,18 @@ function violation(cmd) {
 // MCP tools are named by their server, so their capability can only be read off the name. Deny the mutating verbs;
 // a false positive costs one line in the Diagnosis, a false negative costs the read-only contract.
 const MCP_WRITE = /(^|_)(create|update|delete|remove|write|edit|put|post|patch|push|merge|close|reopen|comment|add|set|assign|approve|submit|publish|upload|rename|move|link|unlink|archive|restore|revert|run|execute|trigger|start|stop|cancel|send)(_|$)/i;
+// The one write these agents may make: filing an issue. A finding they are not here to fix has nowhere else to go —
+// the report template holds one line for it and the orchestrator only relays prose — so it dies in a transcript
+// unless it reaches the tracker, and creating an issue changes no code and no diagnosis. Narrow on purpose: creating
+// one only — never commenting on, editing, closing or linking one — a multi-method tool must say `create`, and the
+// name must *end* there, so `create_work_item_comment` is not a create. Work items count: a tracker is a tracker.
+const FILE_ISSUE = /(^|_)(create|new)_(issue|work_item)$|(^|_)(issue|work_item)_create$|^issue_write$/i;
 // mcp__<server>__<tool> on Claude Code; a Copilot MCP tool arrives as <server>/<tool>.
-const mcpViolation = (name) => {
+const mcpViolation = (name, input) => {
   const tool = name.startsWith('mcp__') ? name.split('__').slice(2).join('__') : name.split('/').slice(1).join('/');
   // Servers name tools snake_case or camelCase; normalise so one pattern covers deleteIssue and delete_issue alike.
   const norm = tool.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[^\w]+/g, '_');
+  if (FILE_ISSUE.test(norm) && (!input?.method || input.method === 'create')) return null;
   return tool && MCP_WRITE.test(norm) ? `${name} is a write-shaped MCP tool` : null;
 };
 
@@ -90,7 +100,7 @@ process.stdin.on('end', () => {
       who = hook.agent_type.replace(/^.*:/, ''); // frontmatter wiring: no --agent, but the agent's own name is on the hook input
     }
     const name = hook.tool_name || '';
-    why = /^mcp__/.test(name) || name.includes('/') ? mcpViolation(name)
+    why = /^mcp__/.test(name) || name.includes('/') ? mcpViolation(name, hook.tool_input)
       : violation(hook.tool_input?.command || '');
   } catch { process.exit(0); }
   if (!why) process.exit(0);
