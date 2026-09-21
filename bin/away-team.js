@@ -158,21 +158,19 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
   }).filter((l) => l !== null).join('\n');
 }
 
-// Writes agents/ and skills/ under dest in the platform's format.
-function emit(platform, dest, opts = {}) {
-  fs.mkdirSync(path.join(dest, 'agents'), { recursive: true });
+// Renders every file for one platform under dest, in that platform's format. Pure: it touches no disk, so an
+// unknown tier or tool alias throws here, before anything has been removed or written. flush() does the writing.
+function plan(platform, dest, opts = {}) {
+  const files = [];
   for (const f of agents) {
     const out = platform === 'copilot' ? f : f.replace(/\.agent\.md$/, '.md');
-    fs.writeFileSync(path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f }));
+    files.push([path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f })]);
   }
-  fs.cpSync(path.join(ROOT, 'skills'), path.join(dest, 'skills'), { recursive: true });
-  // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
-  if (platform === 'claude') fs.cpSync(path.join(ROOT, 'hooks'), path.join(dest, 'hooks'), { recursive: true });
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
   // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
   if (opts.plugin) {
     const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" --agent ${INVESTIGATOR}` }] }] };
-    fs.writeFileSync(path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`);
+    files.push([path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`]);
   }
   if (platform === 'claude') { // orchestrator as a skill too: the Claude desktop app has no agent picker
     // A skill cannot carry an agent's tool allowlist. It can name a model and remove tools, but only for the turn
@@ -184,11 +182,27 @@ function emit(platform, dest, opts = {}) {
     const allowed = tools ? tools[1].replace(/\([^)]*\)/g, '').split(', ') : Object.values(CLAUDE_TOOLS).join(', ').split(', ');
     const disallowed = Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t));
     const body = rendered.split(/^---\r?\n/m)[2];
-    const dir = path.join(dest, 'skills', ORCHESTRATOR);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`);
+    files.push([path.join(dest, 'skills', ORCHESTRATOR, 'SKILL.md'),
+      `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`]);
+  }
+
+  const copies = [[path.join(ROOT, 'skills'), path.join(dest, 'skills')]];
+  // Agent-scoped hooks are Claude Code only; the investigator's read-only guard lives here.
+  if (platform === 'claude') copies.push([path.join(ROOT, 'hooks'), path.join(dest, 'hooks')]);
+  return { copies, files };
+}
+
+// Applies a plan. Nothing here can fail on bad input, so by the time it runs the render has already succeeded.
+function flush({ copies, files }) {
+  for (const [from, to] of copies) fs.cpSync(from, to, { recursive: true });
+  for (const [file, content] of files) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
   }
 }
+
+// Writes agents/ and skills/ under dest in the platform's format.
+const emit = (platform, dest, opts = {}) => flush(plan(platform, dest, opts));
 
 // ponytail and caveman both read defaultMode from $XDG_CONFIG_HOME/<name>/config.json,
 // else %APPDATA%\<name>\config.json on Windows, else ~/.config/<name>/config.json.
@@ -266,16 +280,21 @@ const mcpFor = (built) => (flag('--no-mcp') ? [] : built ? DEFAULT_MCP
 
 if (flag('--build')) {
   const dist = path.join(ROOT, 'dist');
-  fs.rmSync(dist, { recursive: true, force: true });
   const meta = {
     name: PLUGIN, version: pkg.version, description: pkg.description, author: pkg.author,
     homepage: pkg.homepage, repository: pkg.repository, license: pkg.license, keywords: pkg.keywords,
   };
-  emit('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
-  fs.writeFileSync(path.join(dist, 'copilot', 'plugin.json'), `${JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2)}\n`);
-  emit('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) });
-  fs.mkdirSync(path.join(dist, 'claude', '.claude-plugin'), { recursive: true });
-  fs.writeFileSync(path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), `${JSON.stringify(meta, null, 2)}\n`);
+  // Render both platforms before removing anything. dist/ is wiped so a deleted agent cannot linger in it, and a
+  // build that throws half way would otherwise leave nothing there at all.
+  const plans = [
+    plan('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+    plan('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+  ];
+  plans[0].files.push([path.join(dist, 'copilot', 'plugin.json'),
+    `${JSON.stringify({ ...meta, agents: 'agents/', skills: 'skills/' }, null, 2)}\n`]);
+  plans[1].files.push([path.join(dist, 'claude', '.claude-plugin', 'plugin.json'), `${JSON.stringify(meta, null, 2)}\n`]);
+  fs.rmSync(dist, { recursive: true, force: true });
+  plans.forEach(flush);
   console.log(`built dist/copilot and dist/claude (v${pkg.version})`);
   process.exit(0);
 }

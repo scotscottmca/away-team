@@ -360,3 +360,64 @@ test('the web session hook parses, stays silent off the remote, and is wired to 
   assert.ok(fs.existsSync(path.join(ROOT, cmd.replace('$CLAUDE_PROJECT_DIR/', ''))),
     `.claude/settings.json points at a file that does not exist: ${cmd}`);
 });
+
+test('a failed build leaves the previous render untouched', () => {
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-atomic-'));
+  for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
+  const build = () => {
+    try { execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' }); return 0; }
+    catch (e) { return e.status; }
+  };
+  assert.strictEqual(build(), 0, 'the first build of an unmutated copy failed');
+
+  const snapshot = () => {
+    const out = {};
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const f = path.join(d, e.name);
+        if (e.isDirectory()) walk(f); else out[path.relative(tmp, f)] = fs.readFileSync(f, 'utf8');
+      }
+    };
+    walk(path.join(tmp, 'dist'));
+    return out;
+  };
+  const before = snapshot();
+
+  // Change an agent that renders early so a successful build WOULD alter dist/, then break a later one so it cannot
+  // finish. Agents render in directory order, so basher is written well before the investigator throws.
+  const edit = (file, from, to) => {
+    const p = path.join(tmp, 'agents', file);
+    const text = fs.readFileSync(p, 'utf8');
+    assert.ok(text.includes(from), `fixture drift: "${from}" is no longer in ${file}`);
+    fs.writeFileSync(p, text.replace(from, to));
+  };
+  edit('away-team-basher.agent.md', 'description: Fixes a bug', 'description: SENTINEL Fixes a bug');
+  edit('away-team-investigator.agent.md', 'model: strong', 'model: bogus');
+
+  assert.notStrictEqual(build(), 0, 'the build succeeded with a bogus model tier');
+  assert.deepStrictEqual(snapshot(), before, 'a failed build left dist/ partly rewritten');
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('both marketplace manifests point at a render that exists', () => {
+  // Hand-maintained, user-facing, and the only thing standing between `plugin marketplace add` and a 404.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  for (const [file, platform] of [['.claude-plugin/marketplace.json', 'claude'], ['.github/plugin/marketplace.json', 'copilot']]) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    assert.strictEqual(manifest.plugins.length, 1, `${file}: expected exactly one plugin entry`);
+    const entry = manifest.plugins[0];
+    assert.strictEqual(entry.source, `./dist/${platform}`, `${file}: source is ${entry.source}, not ./dist/${platform}`);
+    for (const sub of ['agents', 'skills']) {
+      const dir = path.join(ROOT, 'dist', platform, sub);
+      assert.ok(fs.existsSync(dir), `${file}: ${entry.source}/${sub} does not exist`);
+      assert.ok(fs.readdirSync(dir).length, `${file}: ${entry.source}/${sub} is empty`);
+    }
+    for (const key of ['name', 'description']) assert.ok(entry[key], `${file}: plugin entry has no ${key}`);
+  }
+  // The two plugin manifests are generated, so a mismatch here means the build drifted from package.json.
+  for (const f of ['claude/.claude-plugin/plugin.json', 'copilot/plugin.json']) {
+    const meta = JSON.parse(fs.readFileSync(dist(f), 'utf8'));
+    assert.strictEqual(meta.version, pkg.version, `dist/${f}: version ${meta.version} is not package.json's ${pkg.version}`);
+  }
+});
