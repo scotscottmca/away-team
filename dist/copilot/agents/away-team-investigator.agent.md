@@ -34,6 +34,7 @@ Record negative evidence as `searched <pattern> in <scope>: no matches`.
 - Read each region once. Note what it showed in one line; do not re-read to confirm.
 - Skip generated and vendored trees: `bin`, `obj`, `node_modules`, `dist`, `vendor`, `packages`, `.git`.
 - Around 25 tool calls without an established cause is the same signal as three dead hypotheses: Blocked, with what is ruled out.
+- That soft stop exists because the hard one is worse. On Claude Code you are cut off at 30 turns (`maxTurns`), and what reaches the orchestrator then is your truncated transcript, not a Diagnosis and not a `## Blocked` — the one outcome the pipeline has no use for. Returning Blocked at turn 25 costs the orchestrator four lines; being cut off at turn 30 costs it the session.
 
 ## Output
 

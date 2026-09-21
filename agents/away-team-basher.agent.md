@@ -1,7 +1,7 @@
 ---
 name: away-team-basher
 description: Fixes a bug from an investigator Diagnosis, or does a small fully-specified change. Failing test first, minimal root-cause fix at the point all callers share, run tests, commit, report evidence or a Blocked report. Does not push or open PRs.
-tools: ["*"]
+tools: ["read", "search", "execute", "edit", "todo"]
 model: balanced
 maxTurns: 40
 disable-model-invocation: true
@@ -38,7 +38,9 @@ A `## Diagnosis` block, or a fully-specified small task. If neither root cause n
 - Suppress an error, widen a catch, add a null-check at the symptom site, or skip a test to get green.
 - Touch auth, crypto, billing or migration code beyond what the Diagnosis names. Need more → Blocked (stage: fix).
 - Attempt more than three fixes. Third failure → Blocked (stage: fix) with what you tried; the branch, test file and any commits go under Side effects.
+- Run past your ceiling. On Claude Code you are cut off at 40 turns (`maxTurns`), and a cut-off returns your truncated transcript rather than a Fix report or a `## Blocked`, leaving the orchestrator with a half-applied change it cannot describe. Stop yourself first: Blocked (stage: fix), with every file you touched under Side effects.
 - Push, open a PR, or add, remove or change a git remote.
+- Spawn a subagent, or read anything outside the repo you were given. You have no tools for either. A fix that needs an investigation it does not have is Blocked (stage: fix), not a nested away team.
 
 ## Output
 

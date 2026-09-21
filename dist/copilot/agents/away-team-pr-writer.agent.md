@@ -26,6 +26,7 @@ You write PRs like a technical writer. The body is the TL;DR. The breakdown live
 - Every turn re-reads your whole context, so batch: issue independent greps, reads and commands together in one turn, never one at a time.
 - `git diff --stat` first. Read full hunks only for the files you will comment on. For a diff over about 400 lines, work from the Fix report and the stat.
 - Do not read files outside the diff, and nothing outside the repo root you were given.
+- On Claude Code you are cut off at 20 turns (`maxTurns`), and a cut-off returns your truncated transcript, not a `## PR report` and not a `## Blocked`. If the PR exists but the breakdown is unfinished, return Blocked (stage: breakdown) with the PR URL under Side effects, so nobody opens a second one.
 
 ## Rules
 
