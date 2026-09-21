@@ -68,11 +68,11 @@ What the npx install writes:
 |---|---|
 | Copilot app / CLI | `/agent` → **away-team**, or `copilot --agent away-team` |
 | | Both read the agent list when a chat session starts: after installing, start a new session before looking for it. |
-| Claude Code CLI | `claude --agent away-team` |
+| Claude Code CLI | `claude --agent away-team` (also finds the plugin install; `away-team:away-team` if another plugin ships an `away-team` agent too) |
 | Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
-| Claude desktop app (no agent picker) | `/away-team <your request>` |
+| Claude desktop app (no agent picker) | `/away-team <your request>` (plugin install: `/away-team:away-team`) |
 
-Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator adds the routing rules and gates.
+Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator never is. Its gates work by stopping to ask you, and a subagent cannot ask, so its description says not to delegate to it, its `tools` allowlist names only its four specialists, and if a session delegates to it anyway it returns `## Blocked` instead of running. To make that a rule of the harness rather than of the description, add `"permissions": { "deny": ["Agent(away-team)"] }` to `~/.claude/settings.json` (`Agent(away-team:away-team)` for the plugin install, which registers it under that scoped name). Headless runs (`claude -p --agent away-team`) still work: the orchestrator refuses only when the harness tells it that it is a subagent, not merely because print mode withholds the ask tool.
 
 ## Use
 
@@ -84,7 +84,7 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
 
-Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself.
+Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself. The gates only exist on the main thread, so the orchestrator runs as the agent you selected and refuses to run as a subagent.
 
 Ponytail and caveman both default to **ultra**. Change the default with `npx @scotscottmca/away-team --level lite|full|ultra` (it writes each plugin's `config.json`, and a line in `~/.copilot/copilot-instructions.md` because caveman has no hooks on Copilot). Change it for one session with `/ponytail full` (Copilot namespaces it `/ponytail:ponytail`) or `/caveman full`.
 
@@ -117,6 +117,8 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 1. **Copilot CLI may downgrade a subagent's model to the session model** when the subagent's is pricier ([copilot-cli#2758](https://github.com/github/copilot-cli/issues/2758)). So the investigator only gets the strong tier if the session is on it. Run sessions on the balanced tier and `/model` up for a hard triage. Cheaper subagent models are never downgraded. Claude Code has no such downgrade.
 2. **Copilot model slugs in frontmatter are undocumented.** The installer writes CLI-style slugs. Run `/model` once to see the spelling your CLI accepts and fix `MODELS` in `bin/away-team.js` if it differs.
 3. Copilot's auto model selection gives a discount but ignores per-agent models; not used here.
+4. **The Claude desktop skill enforces less than the agent.** `/away-team` is the orchestrator's body as a skill, for the desktop app's lack of an agent picker. A skill can carry `model` and `disallowed-tools`, and the render sets both (the balanced tier; every tool the agent's allowlist leaves out), but they apply only to the turn that invokes the skill and clear on your next message, and a skill cannot restrict which subagents the Agent tool may spawn. After that first turn, "never edits code" is prose. For the enforced form on the desktop app, set `"agent": "away-team"` in the project's `.claude/settings.json` (table above): every session in that project then runs the orchestrator with its tool list and model.
+5. **Plugin install: specialist names are scoped.** Claude Code registers a plugin's agents as `<plugin>:<name>`, and a bare name does not resolve for delegation (`Agent type 'away-team-mapper' not found`, checked against a live plugin load), so `dist/claude` renders the orchestrator's routing table and Agent allowlist as `away-team:away-team-mapper` and so on. The npx install keeps bare names. `claude --agent away-team` still finds the plugin's orchestrator by its bare name.
 
 ## Why it is built this way
 
@@ -126,7 +128,7 @@ Cheaper choices when cost bites: a code-specialised mid-price model for `balance
 - **Investigator never edits.** Read-only tools make "diagnose, don't patch the symptom" a hard constraint. Three falsified hypotheses is the stop rule (superpowers `systematic-debugging`).
 - **CODEMAP.md is the memory.** Persistent, committed, refreshed by diff against its own `commit:` header. Names not links, invariants not file lists (matklad's ARCHITECTURE.md guidance). Basher updates it when a fix moves a boundary.
 - **PR body is the TL;DR.** Line-level reasoning goes in one review via the REST API (`gh pr comment` cannot do inline), narrative in one top-level comment.
-- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ, and Claude-only keys such as `maxTurns` are dropped for Copilot. The installer rewrites those lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. No hooks.
+- **One source, rendered per platform.** Agent bodies are identical; only `tools` aliases and `model` differ, and Claude-only keys such as `maxTurns` are dropped for Copilot. The installer rewrites those lines at install time, and `npm run build` writes the same output to `dist/` for the marketplaces, which copy files verbatim. The orchestrator's `agent(...)` entry is an allowlist of the subagents it may spawn: on Claude Code it renders to `Agent(...)`, which the harness enforces for a main-thread agent; on Copilot, which has no such syntax, it renders to a bare `agent`. The Claude plugin render also prefixes the specialist names with `away-team:`, the scoped identifier plugin agents load under. No hooks.
 
 ## Contributing
 
