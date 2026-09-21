@@ -168,7 +168,7 @@ Edit `agents/`, `skills/` and `hooks/` only; `dist/` is generated on release. Ru
 
 ## Release
 
-A push to `main` that touches `agents/`, `skills/`, `bin/`, `hooks/` or `package.json` is a release. `npm test` runs before publish, so a broken render never reaches npm. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm. Doc-only pushes (README, `docs/`, LICENSE, workflow) do not release; the README ships with the next code release. Pull after a releasing push to pick up the version commit.
+`.github/workflows/ci.yml` runs `npm test` on every pull request, so a broken render is caught before it is merged. A push to `main` that touches `agents/`, `skills/`, `bin/`, `hooks/` or `package.json` is a release, and `npm test` runs again there before publish, so a broken render never reaches npm either. `.github/workflows/publish.yml` bumps the patch version, rebuilds `dist/`, commits, tags and publishes to npm. Doc-only pushes (README, `docs/`, LICENSE, workflow) do not release; the README ships with the next code release. Pull after a releasing push to pick up the version commit.
 
 For a minor or major bump, run `npm version minor` (or `major`) locally and push; the workflow sees that version is not on npm yet and publishes it as is.
 
