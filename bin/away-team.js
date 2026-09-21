@@ -57,6 +57,8 @@ const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encodin
 // for a server that is not configured, so every source here is best-effort and a false positive costs nothing.
 // The Azure DevOps server ships as a default under both names its own guide registers it as (`ado` on Copilot CLI,
 // `azure-devops` on Claude Code); it is also what dist/ is built with, since that is shared and cannot be discovered for.
+// GitHub ships as a default too: a hosted/remote session has no `gh` binary, so pr-writer and the read-only guard's
+// issue-filing exception need the MCP path there instead.
 const DEFAULT_MCP = ['ado', 'azure-devops', 'github'];
 // Server names out of a `<cli> mcp list` table or a JSON config: keys of mcpServers / servers / mcp, at any depth
 // that the known config shapes use.
