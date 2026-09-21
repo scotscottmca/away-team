@@ -30,3 +30,16 @@ jobs:
       - run: npm ci
       # Rebuilds dist/ and asserts over it, including that dist/ matches what is committed.
       - run: npm test
+
+  # Once, not once per matrix leg. High and critical only: a moderate advisory with no fix available
+  # must not block an unrelated pull request, and Dependabot raises the routine bumps weekly.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npm audit --audit-level=high
