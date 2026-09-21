@@ -22,8 +22,8 @@ jobs:
         # which the ESM-only @clack/prompts needs; 18 and 20.0 fail outright, checked on both.
         node: ['20.19.0', '22', '24']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       # The install tests run bin/away-team.js, which needs @clack/prompts and picocolors.
@@ -37,8 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
       - run: npm ci
