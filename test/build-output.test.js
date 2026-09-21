@@ -75,6 +75,28 @@ test('every allowlisted agent can reach the Azure DevOps MCP server by default',
   }
 });
 
+test('every allowlisted agent can reach the GitHub MCP server by default', () => {
+  // The GitHub MCP server is what a hosted/remote session injects in place of a `gh` binary (issue 14): a server
+  // that cannot be discovered but is the house default, same rationale as ado/azure-devops above.
+  for (const a of all) {
+    const m = frontmatter(a.text).match(/^tools: (.*)$/m);
+    if (!m) continue;
+    const want = a.platform === 'claude' ? 'mcp__github__*' : '"github/*"';
+    assert.ok(m[1].includes(want), `${a.platform}/${a.name}: tools lack ${want}`);
+  }
+});
+
+test('pr-writer prefers the GitHub MCP path but keeps the gh fallback', () => {
+  // Issue 14: `gh` is unavailable in hosted/remote sessions. pr-writer must try MCP first and fall back to `gh`,
+  // never gate on `gh` alone — a bare "no gh -> Blocked" sentence would kill the step before MCP gets a chance.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team-pr-writer')) {
+    const mcpRef = a.platform === 'claude' ? 'mcp__github__' : 'github/';
+    assert.ok(a.text.includes(mcpRef), `${a.platform}/${a.name}: no GitHub MCP reference`);
+    assert.ok(a.text.includes('gh pr create'), `${a.platform}/${a.name}: lost the gh fallback`);
+    assert.ok(!/No `?gh`?,? ?not authenticated/i.test(a.text), `${a.platform}/${a.name}: still gates preflight on gh alone`);
+  }
+});
+
 test('every model is a real model for its platform', () => {
   for (const a of all) {
     const m = frontmatter(a.text).match(/^model: (.*)$/m);
@@ -233,14 +255,14 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github__get_issue');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
