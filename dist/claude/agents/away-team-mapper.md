@@ -4,6 +4,7 @@ description: "Trawls a solution and writes docs/CODEMAP.md (entry points, module
 tools: Read, Grep, Glob, Bash, Edit, Write, NotebookEdit, mcp__ado__*, mcp__azure-devops__*, mcp__github__*
 skills: ["away-team:codemap"]
 model: haiku
+effort: low
 maxTurns: 50
 ---
 
