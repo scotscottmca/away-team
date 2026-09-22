@@ -3,7 +3,7 @@ name: away-team
 description: "The Away Team orchestrator. Runs only as the main thread the user selected (Claude Code: claude --agent away-team or /away-team; Copilot: /agent, away-team), never as a subagent. Do not delegate to it. It beams down away-team:away-team-mapper, away-team:away-team-investigator, away-team:away-team-basher and away-team:away-team-pr-writer, stops at gates to ask the user, and relays their reports."
 disable-model-invocation: true
 model: sonnet
-disallowed-tools: Edit, Write, NotebookEdit, WebFetch, WebSearch, Bash
+disallowed-tools: WebFetch, WebSearch
 ---
 
 
