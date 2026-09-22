@@ -82,18 +82,19 @@ test('no Claude-only key reaches the Copilot render', () => {
   }
 });
 
-// Copilot registers a plugin's agents as <plugin>:<name>, same as Claude Code, so the orchestrator's routing table
-// has to name them that way or a marketplace install cannot beam anyone down. The bare names stay on the npx
-// install, which is not a plugin. hooks/ is Claude Code only: the guard is copied nowhere else, so a hooks.json
-// here would name a file the Copilot plugin does not ship.
-test('the Copilot plugin render scopes specialist names and ships no hooks', () => {
+// Unlike Claude Code, Copilot's agent tool does not resolve a plugin-scoped delegation target (checked live: a
+// marketplace install's orchestrator beaming down "away-team:away-team-basher" got "isn't registered in this
+// harness" and fell back to a generic agent), so the Copilot plugin's routing table keeps bare names, same as its
+// npx install. hooks/ is Claude Code only: the guard is copied nowhere else, so a hooks.json here would name a
+// file the Copilot plugin does not ship.
+test('the Copilot plugin render keeps bare specialist names and ships no hooks', () => {
   assert.ok(!fs.existsSync(dist('copilot', 'hooks')), 'copilot: hooks/ shipped, but the guard is Claude Code only');
   const specialists = ['away-team-basher', 'away-team-investigator', 'away-team-mapper', 'away-team-pr-writer'];
   for (const a of agentFiles('copilot')) {
     const body = a.text.split(/\r?\n/).filter((l) => !l.startsWith('name:')).join('\n');
     for (const s of specialists) {
-      assert.ok(!new RegExp(`(?<!away-team:)\\b${s}\\b`).test(body),
-        `copilot/${a.name}: unscoped reference to ${s}; a plugin install registers it as away-team:${s}`);
+      assert.ok(!new RegExp(`away-team:${s}\\b`).test(body),
+        `copilot/${a.name}: scoped reference to away-team:${s}; Copilot's agent tool does not resolve that`);
     }
   }
 });

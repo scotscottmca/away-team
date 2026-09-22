@@ -160,7 +160,10 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
     if (plugin && line.startsWith('hooks:')) { dropping = true; return null; }
     if (platform === 'claude' && COPILOT_ONLY_KEYS.some((k) => line.startsWith(`${k}:`))) return null;
     if (line.includes(ROOT_VAR)) line = line.split(ROOT_VAR).join(root);
-    if (plugin && SPECIALIST && !line.startsWith('name:')) line = line.replace(SPECIALIST, scope('$1'));
+    // Scoping is Claude Code only: Copilot's agent tool does not resolve a plugin-scoped delegation target (checked
+    // live — a marketplace install's orchestrator beaming down "away-team:away-team-basher" got "isn't registered
+    // in this harness" and fell back to a generic agent), so the Copilot plugin keeps bare names, same as its npx install.
+    if (plugin && platform === 'claude' && SPECIALIST && !line.startsWith('name:')) line = line.replace(SPECIALIST, scope('$1'));
     // Quote the description last, after any specialist scoping has rewritten it. A description is prose, and an
     // unquoted YAML scalar holding ": " (as in "Copilot: /agent") parses as a nested mapping, which fails the whole
     // frontmatter block: Copilot logs `mapping values are not allowed in this context` and drops the agent from
