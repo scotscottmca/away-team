@@ -42,6 +42,31 @@ test('every agent has a well-formed frontmatter block', () => {
   }
 });
 
+// A frontmatter value is a YAML scalar, and an unquoted one holding ": " opens a nested mapping, which fails the
+// whole block. Copilot logs `mapping values are not allowed in this context` and drops the agent from /agent with
+// no other sign, so the render quotes every description and this keeps an unquoted colon-space from shipping again.
+test('no frontmatter value can break the YAML parser', () => {
+  const files = [...all.map((a) => ({ label: `${a.platform}/${a.name}`, text: a.text })),
+    { label: 'claude/skills/away-team', text: fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8') }];
+  for (const f of files) {
+    for (const line of frontmatter(f.text).split(/\r?\n/)) {
+      const m = line.match(/^([\w-]+): (.+)$/);
+      if (!m) continue; // an indented block member, or a key that only opens one
+      if (/^["'[]/.test(m[2])) continue; // a quoted scalar, or a flow sequence whose own items are quoted
+      assert.ok(!m[2].includes(': '), `${f.label}: unquoted ${m[1]} contains ": ", which fails YAML frontmatter parsing`);
+    }
+  }
+});
+
+test('every rendered description is a quoted scalar', () => {
+  const described = [...all, { platform: 'claude', name: 'skills/away-team', text: fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8') }];
+  for (const a of described) {
+    const d = frontmatter(a.text).match(/^description: (.*)$/m);
+    assert.ok(d, `${a.platform}/${a.name}: no description`);
+    assert.ok(/^".*"$/.test(d[1]), `${a.platform}/${a.name}: description is not a quoted scalar`);
+  }
+});
+
 test('nothing renders as undefined', () => {
   for (const a of all) assert.ok(!a.text.includes('undefined'), `${a.platform}/${a.name}: contains "undefined"`);
   for (const f of ['skills/away-team/SKILL.md']) {
@@ -54,6 +79,22 @@ test('no Claude-only key reaches the Copilot render', () => {
     const fm = frontmatter(a.text);
     for (const k of CLAUDE_ONLY) assert.ok(!new RegExp(`^${k}:`, 'm').test(fm), `copilot/${a.name}: Claude-only key ${k}`);
     assert.ok(!fm.includes('${AWAY_TEAM_ROOT}'), `copilot/${a.name}: unsubstituted root placeholder`);
+  }
+});
+
+// Copilot registers a plugin's agents as <plugin>:<name>, same as Claude Code, so the orchestrator's routing table
+// has to name them that way or a marketplace install cannot beam anyone down. The bare names stay on the npx
+// install, which is not a plugin. hooks/ is Claude Code only: the guard is copied nowhere else, so a hooks.json
+// here would name a file the Copilot plugin does not ship.
+test('the Copilot plugin render scopes specialist names and ships no hooks', () => {
+  assert.ok(!fs.existsSync(dist('copilot', 'hooks')), 'copilot: hooks/ shipped, but the guard is Claude Code only');
+  const specialists = ['away-team-basher', 'away-team-investigator', 'away-team-mapper', 'away-team-pr-writer'];
+  for (const a of agentFiles('copilot')) {
+    const body = a.text.split(/\r?\n/).filter((l) => !l.startsWith('name:')).join('\n');
+    for (const s of specialists) {
+      assert.ok(!new RegExp(`(?<!away-team:)\\b${s}\\b`).test(body),
+        `copilot/${a.name}: unscoped reference to ${s}; a plugin install registers it as away-team:${s}`);
+    }
   }
 });
 

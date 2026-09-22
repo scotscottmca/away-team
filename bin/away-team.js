@@ -160,7 +160,13 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
     if (plugin && line.startsWith('hooks:')) { dropping = true; return null; }
     if (platform === 'claude' && COPILOT_ONLY_KEYS.some((k) => line.startsWith(`${k}:`))) return null;
     if (line.includes(ROOT_VAR)) line = line.split(ROOT_VAR).join(root);
-    if (plugin && SPECIALIST && !line.startsWith('name:')) return line.replace(SPECIALIST, scope('$1'));
+    if (plugin && SPECIALIST && !line.startsWith('name:')) line = line.replace(SPECIALIST, scope('$1'));
+    // Quote the description last, after any specialist scoping has rewritten it. A description is prose, and an
+    // unquoted YAML scalar holding ": " (as in "Copilot: /agent") parses as a nested mapping, which fails the whole
+    // frontmatter block: Copilot logs `mapping values are not allowed in this context` and drops the agent from
+    // /agent with no other sign. Checked live on Copilot 1.0.86; the orchestrator was the only agent affected.
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
+    if ((m = line.match(/^description: (.*)$/))) return `description: ${JSON.stringify(m[1])}`;
     return line;
   }).filter((l) => l !== null).join('\n');
 }
@@ -174,8 +180,10 @@ function plan(platform, dest, opts = {}) {
     files.push([path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f })]);
   }
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
-  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
-  if (opts.plugin) {
+  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input. Claude Code only:
+  // Copilot has no hooks, and copies below ships hooks/ (the guard itself) nowhere else, so a hooks.json in the
+  // Copilot plugin would name a file that is not there.
+  if (opts.plugin && platform === 'claude') {
     const agentFlags = GUARDED_AGENTS.map((a) => `--agent ${a}`).join(' ');
     const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" ${agentFlags}` }] }] };
     files.push([path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`]);
@@ -297,7 +305,7 @@ if (flag('--build')) {
   // Render both platforms before removing anything. dist/ is wiped so a deleted agent cannot linger in it, and a
   // build that throws half way would otherwise leave nothing there at all.
   const plans = [
-    plan('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+    plan('copilot', path.join(dist, 'copilot'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
     plan('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
   ];
   plans[0].files.push([path.join(dist, 'copilot', 'plugin.json'),
