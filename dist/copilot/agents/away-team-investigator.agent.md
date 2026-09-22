@@ -1,6 +1,6 @@
 ---
 name: away-team-investigator
-description: Root-causes a bug quickly. Read-only. Reproduces, localises, tests one hypothesis at a time, returns a Diagnosis with path:line evidence and a fix recommendation, or a Blocked report. Never edits files.
+description: "Root-causes a bug quickly. Read-only. Reproduces, localises, tests one hypothesis at a time, returns a Diagnosis with path:line evidence and a fix recommendation, or a Blocked report. Never edits files."
 tools: ["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*"]
 model: claude-opus-5
 ---
