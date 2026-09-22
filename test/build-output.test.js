@@ -170,6 +170,22 @@ test('every Claude agent that names an MCP server can also load its deferred too
   }
 });
 
+test('the orchestrator can fetch a URL but cannot search the web', () => {
+  // `fetch` is `web` without the search half. Reading an issue the user named is the orchestrator's job when the
+  // tracker is unreachable; going looking is not, and nothing in this pack should be browsing.
+  const o = agentFiles('claude').find((a) => a.name.replace(/^away-team:/, '') === 'away-team');
+  const tools = frontmatter(o.text).match(/^tools: (.*)$/m)[1].split(', ');
+  assert.ok(tools.includes('WebFetch'), 'claude orchestrator cannot fetch a URL');
+  assert.ok(!tools.includes('WebSearch'), 'claude orchestrator can search the web');
+  for (const a of agentFiles('claude').filter((x) => x.name.replace(/^away-team:/, '') !== 'away-team')) {
+    const t = frontmatter(a.text).match(/^tools: (.*)$/m)?.[1] || '';
+    assert.ok(!/\bWebFetch\b/.test(t), `claude/${a.name}: a specialist has WebFetch; only the orchestrator gets it`);
+  }
+  for (const a of agentFiles('copilot')) {
+    assert.ok(!/WebFetch|"fetch"/.test(frontmatter(a.text)), `copilot/${a.name}: carries a Claude-only fetch tool`);
+  }
+});
+
 test('the Copilot render never names ToolSearch', () => {
   // ToolSearch is a Claude Code mechanism and has no known Copilot equivalent. Copilot silently drops a name it does
   // not recognise, so this costs nothing there either way — but the rendered allowlist stays honest about what exists.
@@ -308,7 +324,10 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   // A skill's disallowed-tools reaches the subagents its turn spawns (checked live: the mapper could not write a file),
   // so the skill must not remove anything a specialist needs. Bash, Edit and Write are the ones that disarmed the crew.
   const skillDisallowed = skill.match(/^disallowed-tools: (.*)$/m)[1].split(', ');
-  for (const t of ['Bash', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite']) {
+  // WebFetch joined that list for its own reason: it is the orchestrator's last door to an issue, the only one
+  // needing no server, no connector and no `gh`. A live run proved the cost — the GitHub connector was registered
+  // but never connected, `gh` was absent, and six correct WebFetch calls at the right issue URLs were denied here.
+  for (const t of ['Bash', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite', 'WebFetch']) {
     assert.ok(!skillDisallowed.includes(t), `desktop skill disallows ${t}, which a specialist it spawns needs`);
   }
   const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;

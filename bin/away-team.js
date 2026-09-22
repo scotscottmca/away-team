@@ -33,7 +33,10 @@ const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 // MCP server the machine has and a server that reads a work item can usually also create one.
 const GUARD_MATCHER = 'Bash|mcp__.*';
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
-const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
+// `fetch` is `web` without the search half: read a URL you were given, never go looking. The orchestrator needs
+// exactly that — a public issue it was handed, when the tracker is unreachable — and nothing in this pack should
+// be browsing. No verified Copilot equivalent, so it is dropped from that render (see COPILOT_ONLY_DROP).
+const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', fetch: 'WebFetch', ask: 'AskUserQuestion' };
 // Not an alias an agent asks for: the Claude render appends it to any allowlist that names an MCP server, because on
 // that platform an MCP tool may be deferred and unreachable without it. See the render() comment. No Copilot
 // equivalent is known, so the Copilot render never carries it.
@@ -43,7 +46,7 @@ const TOOL_SEARCH = 'ToolSearch';
 // first list that lacked it and has been put back: a second list carries `web_search`, so the alias is real (see
 // COPILOT_TOOLS). Dropping `todo` costs nothing that was working — the basher and the orchestrator never had a todo
 // tool on Copilot — and keeps the rendered allowlist honest about what the agent can actually do.
-const COPILOT_ONLY_DROP = ['ask', 'todo'];
+const COPILOT_ONLY_DROP = ['ask', 'todo', 'fetch'];
 // Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
 // ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
 // Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
