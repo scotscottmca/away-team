@@ -14,6 +14,9 @@ const MODEL_TIERS = require('../bin/models.js');
 const modelIds = (platform) => [...new Set(Object.values(MODEL_TIERS).flatMap((rows) => rows.map((r) => r[platform]).filter(Boolean)))];
 const MODELS = { copilot: modelIds('copilot'), claude: modelIds('claude') };
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
+// Kept in sync by hand with COPILOT_ONLY_KEYS in bin/away-team.js (issue 16): a leaked Copilot-only key into the
+// Claude render is inert there but breaks Claude Code's frontmatter schema, so it must never reach dist/claude.
+const COPILOT_ONLY = ['disable-model-invocation', 'modelPolicy'];
 const EFFORT_LEVELS = ['low', 'medium', 'high'];
 const REPORTS = {
   'away-team-mapper': '## Map report',
@@ -185,8 +188,23 @@ test('reasoning effort renders per platform, and only where the agent sets it', 
 
 test('the Claude render carries no Copilot-only key and no bare placeholder', () => {
   for (const a of agentFiles('claude')) {
-    assert.ok(!/^disable-model-invocation:/m.test(frontmatter(a.text)), `claude/${a.name}: Copilot-only key`);
+    const fm = frontmatter(a.text);
+    for (const k of COPILOT_ONLY) assert.ok(!new RegExp(`^${k}:`, 'm').test(fm), `claude/${a.name}: Copilot-only key ${k}`);
     assert.ok(!a.text.includes('${AWAY_TEAM_ROOT}'), `claude/${a.name}: unsubstituted root placeholder`);
+  }
+});
+
+test('only the investigator declares modelPolicy: "required", and only on Copilot', () => {
+  // issue 16: a declared model the plan cannot honour falls back to the session's model silently unless the agent
+  // sets modelPolicy: "required", which refuses dispatch instead. Only the investigator's reasoning tier is
+  // load-bearing enough to ask for that.
+  for (const a of agentFiles('copilot')) {
+    const fm = frontmatter(a.text);
+    if (a.name === 'away-team-investigator') {
+      assert.match(fm, /^modelPolicy: "required"$/m, `copilot/${a.name}: missing modelPolicy: "required"`);
+    } else {
+      assert.ok(!/^modelPolicy:/m.test(fm), `copilot/${a.name}: unexpected modelPolicy key`);
+    }
   }
 });
 

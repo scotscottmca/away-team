@@ -20,7 +20,7 @@ const resolveModel = (rows, platform) => rows.find((e) => e[platform])?.[platfor
 // Frontmatter keys only Claude Code understands; dropped from the Copilot render, with any indented block under them.
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
 // Frontmatter keys only Copilot understands; dropped from the Claude render.
-const COPILOT_ONLY_KEYS = ['disable-model-invocation'];
+const COPILOT_ONLY_KEYS = ['disable-model-invocation', 'modelPolicy'];
 // Shared reasoning-effort vocabulary; resolved per platform in render() the same way a model tier is (see the
 // `model:` branch), since Claude Code and Copilot spell the key differently (`effort` vs `reasoningEffort`).
 const EFFORT_LEVELS = ['low', 'medium', 'high'];
