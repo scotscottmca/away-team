@@ -180,8 +180,10 @@ function plan(platform, dest, opts = {}) {
     files.push([path.join(dest, 'agents', out), render(read(f), platform, { ...opts, file: f })]);
   }
   // A plugin agent's frontmatter hooks are ignored, so the plugin registers the guard for the whole session and the
-  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input.
-  if (opts.plugin) {
+  // guard scopes itself to the investigator by the agent_type Claude Code passes in the hook input. Claude Code only:
+  // Copilot has no hooks, and copies below ships hooks/ (the guard itself) nowhere else, so a hooks.json in the
+  // Copilot plugin would name a file that is not there.
+  if (opts.plugin && platform === 'claude') {
     const agentFlags = GUARDED_AGENTS.map((a) => `--agent ${a}`).join(' ');
     const hooks = { PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: 'command', command: `node "${opts.root}/hooks/readonly-guard.js" ${agentFlags}` }] }] };
     files.push([path.join(dest, 'hooks', 'hooks.json'), `${JSON.stringify({ hooks }, null, 2)}\n`]);
@@ -303,7 +305,7 @@ if (flag('--build')) {
   // Render both platforms before removing anything. dist/ is wiped so a deleted agent cannot linger in it, and a
   // build that throws half way would otherwise leave nothing there at all.
   const plans = [
-    plan('copilot', path.join(dist, 'copilot'), { root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
+    plan('copilot', path.join(dist, 'copilot'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
     plan('claude', path.join(dist, 'claude'), { plugin: true, root: '${CLAUDE_PLUGIN_ROOT}', mcp: mcpFor(true) }),
   ];
   plans[0].files.push([path.join(dist, 'copilot', 'plugin.json'),

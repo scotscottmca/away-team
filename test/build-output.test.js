@@ -82,6 +82,22 @@ test('no Claude-only key reaches the Copilot render', () => {
   }
 });
 
+// Copilot registers a plugin's agents as <plugin>:<name>, same as Claude Code, so the orchestrator's routing table
+// has to name them that way or a marketplace install cannot beam anyone down. The bare names stay on the npx
+// install, which is not a plugin. hooks/ is Claude Code only: the guard is copied nowhere else, so a hooks.json
+// here would name a file the Copilot plugin does not ship.
+test('the Copilot plugin render scopes specialist names and ships no hooks', () => {
+  assert.ok(!fs.existsSync(dist('copilot', 'hooks')), 'copilot: hooks/ shipped, but the guard is Claude Code only');
+  const specialists = ['away-team-basher', 'away-team-investigator', 'away-team-mapper', 'away-team-pr-writer'];
+  for (const a of agentFiles('copilot')) {
+    const body = a.text.split(/\r?\n/).filter((l) => !l.startsWith('name:')).join('\n');
+    for (const s of specialists) {
+      assert.ok(!new RegExp(`(?<!away-team:)\\b${s}\\b`).test(body),
+        `copilot/${a.name}: unscoped reference to ${s}; a plugin install registers it as away-team:${s}`);
+    }
+  }
+});
+
 test('the Copilot render names the CLI search tools', () => {
   // Copilot CLI did not map the `search` alias to anything (checked live), so every agent that searches must also
   // name grep and glob, or it searches through bash only.
