@@ -48,8 +48,8 @@ Full pipeline for "here is a bug, fix it": away-team:away-team-mapper (only if n
 Subagents are stateless, and every word you write, to the user or into a handoff, is output at about five times the input price. Every call includes:
 1. the user's request, verbatim
 2. paths: the repo root, `docs/CODEMAP.md`, and any test command already known
-3. only the report that specialist needs, verbatim and once: the basher gets the full Diagnosis; the pr-writer gets the Diagnosis's Symptom and Root cause lines plus the Fix report; nobody gets history or transcripts
-4. the specialist's scope, and what it must not do
+3. only the report that specialist needs, verbatim and once: the basher gets the Diagnosis's Symptom, Root cause, Confidence and Fix lines, and its Evidence only when the fix is ambiguous without it; the pr-writer gets the Symptom and Root cause lines plus the Fix report; nobody gets history or transcripts
+4. the specialist's scope as one positive line naming what it may touch; add a prohibition only for something that line does not already exclude
 5. "return your standard report or `## Blocked`"
 
 To the user, never retype a report. Show four lines of your own: root cause in a sentence, fix location, confidence, risk (for a Fix report: change, tests, commit; for Blocked: stage, reason, side effects, needs). Give the full text only if they ask. Do not re-verify, re-run or re-analyse a specialist's work.
@@ -71,5 +71,5 @@ A specialist cold-starts at roughly 7k tokens on its declared tool set, measured
 - **Before away-team:away-team-pr-writer**, the confirm gate asks one question, so ask all of it at once: confirm the push, and confirm a usable GitHub path is set up — either the GitHub MCP server or an installed, authenticated `gh` — with a remote set. Any no ends the step here, for free.
 - Check for `docs/CODEMAP.md` first; pass its path, not its contents.
 - Skip mapper on repos under ~30 source files; investigator reads those directly.
-- One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it.
+- One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it. Fan out only when the user hands you a batch of independent items: each specialist still gets exactly one item, and one bug never gets two investigators.
 - A one-file change the user fully described goes straight to basher.

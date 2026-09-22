@@ -62,7 +62,12 @@ That closes [#13](https://github.com/scotscottmca/away-team/issues/13) on its ow
 not worth anyone's afternoon.
 
 **`experimental.cacheTtl: 1h`** changes the price of a cache read, not the size of a context.
-Real, but it belongs in a pricing argument, not this one.
+Real, but it belongs in a pricing argument, not this one. Here is that argument: on Copilot's
+current pricing, Claude Fable 5.1 is $10 / $0.25 / $50 per M tokens (input / cached read /
+output) against Claude Opus 5 at $5 / $0.50 / $25. Fable's cheaper cache reads only overtake
+Opus's cheaper everything-else past roughly turn 85 of a continuously growing context; the
+investigator stops at 25, so Opus 5 stays the strong-tier default. Re-check when either price
+moves.
 
 ## What it means for the pipeline
 
