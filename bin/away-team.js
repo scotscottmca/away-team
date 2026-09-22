@@ -35,10 +35,11 @@ const GUARD_MATCHER = 'Bash|mcp__.*';
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
 // Aliases with no Copilot tool behind them, dropped from that render rather than emitted as names Copilot ignores:
-// `ask` has no equivalent, and `todo` and `web` are absent from the live tool list quoted below. Dropping them costs
-// nothing that was working — the basher and the orchestrator never had a todo tool on Copilot — and keeps the
-// rendered allowlist honest about what the agent can actually do.
-const COPILOT_ONLY_DROP = ['ask', 'todo', 'web'];
+// `ask` has no equivalent and `todo` is absent from every live tool list seen so far. `web` was dropped here too on a
+// first list that lacked it and has been put back: a second list carries `web_search`, so the alias is real (see
+// COPILOT_TOOLS). Dropping `todo` costs nothing that was working — the basher and the orchestrator never had a todo
+// tool on Copilot — and keeps the rendered allowlist honest about what the agent can actually do.
+const COPILOT_ONLY_DROP = ['ask', 'todo'];
 // Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
 // ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
 // Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
@@ -48,9 +49,10 @@ const COPILOT_ONLY_DROP = ['ask', 'todo', 'web'];
 // it reported a map that was never on disk and the run carried on unmapped. Checked live against the full list a
 // Copilot agent with no `tools:` key reports: view, grep, glob, bash, read_bash, stop_bash, list_bash, create,
 // edit, reply_to_comment, skill, sql. So `read`→view, `execute`→bash and `search`→grep/glob are all confirmed, and
-// `todo` and `web` have no Copilot tool at all — see COPILOT_ONLY_DROP. `agent` is absent from that list too, but
+// `todo` has no Copilot tool at all — see COPILOT_ONLY_DROP — and `web` is `web_search`, which a second, richer list
+// carried and the first did not, so one list is evidence of presence but never of absence. `agent` is absent from both, but
 // delegation demonstrably works on Copilot (see README caveat 10), so it is left alone pending its own check.
-const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'], edit: ['edit', 'create'] };
+const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'], edit: ['edit', 'create'], web: ['web', 'web_search'] };
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
@@ -73,8 +75,11 @@ const run = (cmd, timeout = TIMEOUT_MS) => spawnSync(cmd, { shell: true, encodin
 // The Azure DevOps server ships as a default under both names its own guide registers it as (`ado` on Copilot CLI,
 // `azure-devops` on Claude Code); it is also what dist/ is built with, since that is shared and cannot be discovered for.
 // GitHub ships as a default too: a hosted/remote session has no `gh` binary, so pr-writer and the read-only guard's
-// issue-filing exception need the MCP path there instead.
-const DEFAULT_MCP = ['ado', 'azure-devops', 'github'];
+// issue-filing exception need the MCP path there instead. Like Azure DevOps it goes in under both names it is seen
+// registered as: a Copilot CLI install reported its tools as `github-mcp-server-get_file_contents` and friends, so the
+// server is `github-mcp-server` there while Claude Code's guide registers it as `github`. An allowlist is
+// deny-by-default and names the server, so the wrong name is not a cosmetic miss — it is no GitHub access at all.
+const DEFAULT_MCP = ['ado', 'azure-devops', 'github', 'github-mcp-server'];
 // Server names out of a `<cli> mcp list` table or a JSON config: keys of mcpServers / servers / mcp, at any depth
 // that the known config shapes use.
 const jsonServers = (file) => {
