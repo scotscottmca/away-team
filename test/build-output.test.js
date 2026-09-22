@@ -113,6 +113,16 @@ test('the Copilot render names the CLI search tools', () => {
   }
 });
 
+test('the Copilot render expands every alias that has a differently-named CLI tool', () => {
+  // One live tool list is evidence that a tool exists, never that it does not: `web_search` was absent from the first
+  // list taken and present in the second, and `web` had already been dropped on the strength of the first. So an alias
+  // with a known real name must carry it, and must not be silently dropped instead.
+  for (const a of agentFiles('copilot')) {
+    const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
+    if (m?.[1].includes('"web"')) assert.ok(m[1].includes('"web_search"'), `copilot/${a.name}: web without web_search`);
+  }
+});
+
 test('the Copilot render names the CLI write tools', () => {
   // The bare `edit` alias is not a Copilot tool name, and Copilot drops a name it does not recognise without saying so,
   // which left the mapper and the basher with no way to write a file and no error to report. Every agent that edits must
@@ -398,14 +408,14 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, mcp__github__get_issue');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github-mcp-server/*", "github/get_issue"]');
   // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "edit", "create", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "edit", "create", "ado/*", "azure-devops/*", "github/*", "github-mcp-server/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

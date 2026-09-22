@@ -1,7 +1,7 @@
 ---
 name: away-team
 description: "The Away Team orchestrator. Runs only as the main thread the user selected (Claude Code: claude --agent away-team or /away-team; Copilot: /agent, away-team), never as a subagent. Do not delegate to it. It beams down away-team:away-team-mapper, away-team:away-team-investigator, away-team:away-team-basher and away-team:away-team-pr-writer, stops at gates to ask the user, and relays their reports."
-tools: Agent(away-team:away-team-mapper, away-team:away-team-investigator, away-team:away-team-basher, away-team:away-team-pr-writer), Read, Grep, Glob, TodoWrite, AskUserQuestion, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*
+tools: Agent(away-team:away-team-mapper, away-team:away-team-investigator, away-team:away-team-basher, away-team:away-team-pr-writer), Read, Grep, Glob, TodoWrite, AskUserQuestion, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*
 model: sonnet
 ---
 
