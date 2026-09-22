@@ -34,6 +34,10 @@ const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 const GUARD_MATCHER = 'Bash|mcp__.*';
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
+// Not an alias an agent asks for: the Claude render appends it to any allowlist that names an MCP server, because on
+// that platform an MCP tool may be deferred and unreachable without it. See the render() comment. No Copilot
+// equivalent is known, so the Copilot render never carries it.
+const TOOL_SEARCH = 'ToolSearch';
 // Aliases with no Copilot tool behind them, dropped from that render rather than emitted as names Copilot ignores:
 // `ask` has no equivalent and `todo` is absent from every live tool list seen so far. `web` was dropped here too on a
 // first list that lacked it and has been put back: a second list carries `web_search`, so the alias is real (see
@@ -179,7 +183,18 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
       // `agent(a, b)` is an allowlist: only those subagents can be spawned (main-thread agents only; ignored in a subagent).
       const names = entries.map(([a, args]) => (a === 'agent' && args ? `Agent(${args.split(/\s*,\s*/).map(scope).join(', ')})`
         : a.startsWith('mcp__') ? a : CLAUDE_TOOLS[a]));
-      return `tools: ${[...new Set([...names, ...extra])].join(', ')}`;
+      const claude = [...new Set([...names, ...extra])];
+      // Naming an MCP server is not the same as being able to call it. Claude Code defers MCP tools in hosted and
+      // remote sessions: the schemas are not loaded, the tools are absent from the live tool list, and a direct call
+      // fails — they have to be fetched first with ToolSearch. So an allowlist that names mcp__github__* and nothing
+      // else hands the agent a server it can neither see nor reach, and an agent that reads its own tool list
+      // reasonably concludes the server is not configured. That is what happened: the orchestrator reported "no
+      // authenticated GitHub MCP" on a hosted session where the server was in fact present and authenticated, and
+      // stalled, because `gh` is not installed there either. ToolSearch is the key to the MCP entries already in the
+      // list, so it goes in with them and is left out when there are none (--no-mcp). It grants no new capability:
+      // loading a schema is not permission to call it, and the allowlist still decides that.
+      if (claude.some((t) => t.startsWith('mcp__'))) claude.push(TOOL_SEARCH);
+      return `tools: ${claude.join(', ')}`;
     }
     if (platform === 'copilot' && CLAUDE_ONLY.some((k) => line.startsWith(`${k}:`))) { dropping = line.trim().endsWith(':'); return null; }
     // Claude Code ignores (and warns about) frontmatter hooks on plugin agents; the plugin wires them from hooks/hooks.json.

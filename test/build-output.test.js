@@ -157,6 +157,27 @@ test('every allowlisted agent can reach the GitHub MCP server by default', () =>
   }
 });
 
+test('every Claude agent that names an MCP server can also load its deferred tools', () => {
+  // Claude Code defers MCP tools in hosted and remote sessions: absent from the agent's tool list, and a direct call
+  // fails, until ToolSearch fetches the schema. An allowlist is deny-by-default, so without ToolSearch on it an agent
+  // that names mcp__github__* has a server it can neither see nor reach — and reading its own tool list, it concludes
+  // the server is not configured. That is the failure this guards: the orchestrator reported "no authenticated GitHub
+  // MCP" on a hosted session that had one, and stalled, with no `gh` binary and no web fetch to fall back to.
+  for (const a of agentFiles('claude')) {
+    const tools = frontmatter(a.text).match(/^tools: (.*)$/m)?.[1];
+    if (!tools?.includes('mcp__')) continue;
+    assert.ok(tools.split(', ').includes('ToolSearch'), `claude/${a.name}: names an MCP server but cannot load its tools`);
+  }
+});
+
+test('the Copilot render never names ToolSearch', () => {
+  // ToolSearch is a Claude Code mechanism and has no known Copilot equivalent. Copilot silently drops a name it does
+  // not recognise, so this costs nothing there either way — but the rendered allowlist stays honest about what exists.
+  for (const a of agentFiles('copilot')) {
+    assert.ok(!/ToolSearch/.test(frontmatter(a.text)), `copilot/${a.name}: carries ToolSearch, which is not a Copilot tool`);
+  }
+});
+
 test('pr-writer prefers the GitHub MCP path but keeps the gh fallback', () => {
   // Issue 14: `gh` is unavailable in hosted/remote sessions. pr-writer must try MCP first and fall back to `gh`,
   // never gate on `gh` alone — a bare "no gh -> Blocked" sentence would kill the step before MCP gets a chance.
@@ -348,7 +369,10 @@ test('an install gives the whole crew every MCP server the machine has', () => {
 
   install(['--no-mcp']);
   const off = fs.readFileSync(path.join(home, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');
-  assert.ok(!/mcp__/.test(off.match(/^tools: (.*)$/m)[1]), '--no-mcp still granted MCP servers');
+  const offTools = off.match(/^tools: (.*)$/m)[1];
+  assert.ok(!/mcp__/.test(offTools), '--no-mcp still granted MCP servers');
+  // ToolSearch rides along with the MCP entries it exists to load; with none named there is nothing for it to fetch.
+  assert.ok(!offTools.split(', ').includes('ToolSearch'), '--no-mcp still granted ToolSearch');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -408,7 +432,7 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, mcp__github__get_issue, ToolSearch');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),

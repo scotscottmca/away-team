@@ -1,7 +1,7 @@
 ---
 name: away-team-mapper
 description: "Trawls a solution and writes docs/CODEMAP.md (entry points, module boundaries, data flow, invariants, verified build/test commands) so investigator and basher can navigate without re-reading the repo. Run once per repo, then refresh. Returns a Map report or a Blocked report."
-tools: Read, Grep, Glob, Bash, Edit, Write, NotebookEdit, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*
+tools: Read, Grep, Glob, Bash, Edit, Write, NotebookEdit, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, ToolSearch
 skills: ["away-team:codemap"]
 model: haiku
 effort: low
