@@ -35,7 +35,7 @@ Full breakdown in the review comments.
 
 ## Commands
 
-Prefer the GitHub MCP server (`mcp__github__*` on Claude Code, `github/*` on Copilot) when it is on your allowlist — it works in hosted/remote sessions where `gh` is not installed. Fall back to `gh` only when no GitHub MCP server is available.
+Prefer the GitHub MCP server (`mcp__github__*` on Claude Code, `github/*` on Copilot) when it is on your allowlist — it works in hosted/remote sessions where `gh` is not installed. Claude Code defers those tools in exactly those sessions: they are off the tool list and a direct call fails until `ToolSearch` loads them (`select:mcp__github__create_pull_request`), so load them before treating the server as missing. Fall back to `gh` only when no GitHub MCP server is available.
 
 | Step | MCP (preferred) | `gh` (fallback) |
 |---|---|---|
