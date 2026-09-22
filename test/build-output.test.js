@@ -261,6 +261,31 @@ test('each specialist has exactly one report block and exactly one Blocked block
   }
 });
 
+test('the investigator carries the Review block as well as the Diagnosis', () => {
+  // A review is a second opinion on an issue that already has comments and proposed fixes on it. Routing it to the
+  // investigator without giving it somewhere to land put it straight into the numbered method, where step 2 says never
+  // write a Diagnosis without a reproduction — so a feature request with nothing to reproduce came back Blocked, at a
+  // full cold start per item. The Review block is where that job returns instead.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team-investigator')) {
+    assert.strictEqual(count(a.text, '## Review'), 1, `${a.platform}/${a.name}: expected one "## Review"`);
+    assert.ok(/never Blocks for want of a reproduction/.test(a.text),
+      `${a.platform}/${a.name}: a review can still be gated on reproducing something`);
+    assert.ok(/Not checked:/.test(a.text), `${a.platform}/${a.name}: Review has no unchecked-claims line`);
+  }
+});
+
+test('the orchestrator routes review and never lets one reach the basher', () => {
+  // A Review is an opinion, not a Diagnosis. Letting one authorise a fix would put the basher to work on a proposal
+  // nobody root-caused, which is the expensive call the Cost section exists to prevent.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team')) {
+    assert.ok(/\*\*review\*\*/.test(a.text), `${a.platform}/${a.name}: no review intent in Routing`);
+    assert.ok(/`## Review`/.test(a.text), `${a.platform}/${a.name}: routing never names the Review report`);
+    // The Claude plugin render scopes specialist names to <plugin>:<name>, so match either spelling.
+    assert.ok(/never goes to (away-team:)?away-team-basher/.test(a.text),
+      `${a.platform}/${a.name}: a Review is not barred from the basher`);
+  }
+});
+
 test('the Claude desktop skill body is the orchestrator body', () => {
   const skill = fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8');
   const agent = fs.readFileSync(dist('claude', 'agents', 'away-team.md'), 'utf8');

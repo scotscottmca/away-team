@@ -85,9 +85,12 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 |---|---|
 | "Map this repo" | mapper → `docs/CODEMAP.md` |
 | "Why does X throw on Y?" / paste a stack trace | investigator → Diagnosis, stops |
+| "Review #148" / "second opinion on these six issues" | investigator, one per item → Review, stops |
 | "Fix: <bug>" | investigator → Diagnosis → (gate) → basher → Fix report |
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
+
+**Review** is the investigator's second job, and the one that is not a bug. An issue that already carries comments, proposed approaches and half-agreed fixes wants a second opinion on what is on the table, not a root cause — so the investigator reads the item and every comment through your tracker, checks each proposal against the code, and returns a `## Review`: verdict, `path:line` evidence, what the change would touch, and an explicit list of the claims it did **not** verify. A review never Blocks for want of a reproduction, one item goes to one specialist (six issues is six calls), and a Review is an opinion, never an authorisation — it cannot send the basher to work. Building what a review endorsed is a fix request, and starts over.
 
 Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself. The gates only exist on the main thread, so the orchestrator runs as the agent you selected and refuses to run as a subagent.
 
