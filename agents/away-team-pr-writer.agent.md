@@ -4,6 +4,7 @@ description: Opens or refreshes a pull request from the current branch in the ho
 tools: ["read", "search", "execute"]
 skills: ["pr-format"]
 model: balanced
+effort: low
 maxTurns: 20
 disable-model-invocation: true
 ---

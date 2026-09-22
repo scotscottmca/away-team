@@ -20,7 +20,10 @@ const resolveModel = (rows, platform) => rows.find((e) => e[platform])?.[platfor
 // Frontmatter keys only Claude Code understands; dropped from the Copilot render, with any indented block under them.
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
 // Frontmatter keys only Copilot understands; dropped from the Claude render.
-const COPILOT_ONLY_KEYS = ['disable-model-invocation'];
+const COPILOT_ONLY_KEYS = ['disable-model-invocation', 'modelPolicy'];
+// Shared reasoning-effort vocabulary; resolved per platform in render() the same way a model tier is (see the
+// `model:` branch), since Claude Code and Copilot spell the key differently (`effort` vs `reasoningEffort`).
+const EFFORT_LEVELS = ['low', 'medium', 'high'];
 // Placeholder in agent bodies for the directory this install writes to; hook commands resolve through it.
 // A project-scope install is committed and shared, so it must resolve at runtime, not bake in this machine's path:
 // Claude Code exports CLAUDE_PROJECT_DIR (session root) and CLAUDE_PLUGIN_ROOT (plugin directory) to hook commands.
@@ -136,6 +139,12 @@ function render(text, platform, { plugin = false, root = '.', file = 'agent', mc
       const model = resolveModel(rows, platform);
       if (!model) bad(`model tier "${tier}" has no ${platform} alias`);
       return `model: ${model}`;
+    }
+    // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
+    if ((m = line.match(/^effort: (\w+)$/))) {
+      const level = m[1];
+      if (!EFFORT_LEVELS.includes(level)) bad(`unknown effort level "${level}": expected one of ${EFFORT_LEVELS.join(', ')}`);
+      return platform === 'claude' ? `effort: ${level}` : `reasoningEffort: ${level}`;
     }
     // biome-ignore lint/suspicious/noAssignInExpressions: match-and-test in one line keeps this dispatcher one branch per frontmatter key.
     if (platform === 'claude' && (m = line.match(/^skills: \[(.*)\]$/))) {

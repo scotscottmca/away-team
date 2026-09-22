@@ -3,6 +3,7 @@ name: away-team-pr-writer
 description: "Opens or refreshes a pull request from the current branch in the house format. Conventional-commit title, TL;DR body, full technical breakdown posted as PR review comments. Uses the GitHub MCP server, falling back to gh only where that binary exists. Returns the PR URL or a Blocked report."
 tools: ["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*"]
 model: claude-sonnet-5
+reasoningEffort: low
 disable-model-invocation: true
 ---
 

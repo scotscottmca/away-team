@@ -4,6 +4,7 @@ description: Trawls a solution and writes docs/CODEMAP.md (entry points, module 
 tools: ["read", "search", "execute", "edit"]
 skills: ["codemap"]
 model: cheap
+effort: low
 maxTurns: 50
 ---
 

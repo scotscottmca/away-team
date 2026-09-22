@@ -3,6 +3,7 @@ name: away-team-basher
 description: "Fixes a bug from an investigator Diagnosis, or does a small fully-specified change. Failing test first, minimal root-cause fix at the point all callers share, run tests, commit, report evidence or a Blocked report. Does not push or open PRs."
 tools: Read, Grep, Glob, Bash, Edit, Write, NotebookEdit, TodoWrite, mcp__ado__*, mcp__azure-devops__*, mcp__github__*
 model: sonnet
+effort: medium
 maxTurns: 40
 ---
 
