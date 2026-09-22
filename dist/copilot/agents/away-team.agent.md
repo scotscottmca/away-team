@@ -72,5 +72,5 @@ A specialist cold-starts at roughly 7k tokens on its declared tool set, measured
 - **Before away-team:away-team-pr-writer**, the confirm gate asks one question, so ask all of it at once: confirm the push, and confirm a usable GitHub path is set up — either the GitHub MCP server or an installed, authenticated `gh` — with a remote set. Any no ends the step here, for free.
 - Check for `docs/CODEMAP.md` first; pass its path, not its contents.
 - Skip mapper on repos under ~30 source files; investigator reads those directly.
-- One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it.
+- One specialist call per step. No parallel investigators for one bug; a root cause is in one place, and one investigator traces across layers to it. Fan out only when the user hands you a batch of independent items: each specialist still gets exactly one item, and one bug never gets two investigators.
 - A one-file change the user fully described goes straight to basher.
