@@ -120,7 +120,7 @@ test('the Copilot render names the CLI write tools', () => {
   for (const a of agentFiles('copilot')) {
     const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
     if (!m?.[1].includes('"edit"')) continue;
-    for (const t of ['"write"', '"create"', '"str_replace"']) {
+    for (const t of ['"create"']) {
       assert.ok(m[1].includes(t), `copilot/${a.name}: edit without ${t}`);
     }
   }
@@ -249,7 +249,12 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   assert.ok(!/^hooks:/m.test(orchestratorFm), 'plugin orchestrator carries frontmatter hooks, which Claude Code ignores on plugin agents');
   assert.match(orchestratorFm.match(/^tools: (.*)$/m)[1], /\bBash\b/, 'plugin orchestrator tools do not include Bash');
   const skill = fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8');
-  assert.match(skill, /^disallowed-tools: .*\bBash\b/m, 'desktop skill does not disallow Bash (a skill carries no hook)');
+  // A skill's disallowed-tools reaches the subagents its turn spawns (checked live: the mapper could not write a file),
+  // so the skill must not remove anything a specialist needs. Bash, Edit and Write are the ones that disarmed the crew.
+  const skillDisallowed = skill.match(/^disallowed-tools: (.*)$/m)[1].split(', ');
+  for (const t of ['Bash', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite']) {
+    assert.ok(!skillDisallowed.includes(t), `desktop skill disallows ${t}, which a specialist it spawns needs`);
+  }
   const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;
   // The guard inspects Bash and every MCP tool: the crew now carries every MCP server the machine has.
   const entry = hooks.PreToolUse.find((h) => /\bBash\b/.test(h.matcher));
@@ -400,7 +405,7 @@ test('--mcp spells the server the way each platform reads it', () => {
     '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "edit", "write", "create", "str_replace", "insert", "todo", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "edit", "create", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

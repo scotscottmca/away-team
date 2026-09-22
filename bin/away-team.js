@@ -34,17 +34,23 @@ const TIMEOUT_MS = 120000; // no child of this installer may hang it forever
 const GUARD_MATCHER = 'Bash|mcp__.*';
 // Tool aliases (Copilot's names) to Claude Code tool names. `ask` has no Copilot tool and is dropped from that render.
 const CLAUDE_TOOLS = { agent: 'Agent', read: 'Read', search: 'Grep, Glob', execute: 'Bash', edit: 'Edit, Write, NotebookEdit', todo: 'TodoWrite', web: 'WebFetch, WebSearch', ask: 'AskUserQuestion' };
-const COPILOT_ONLY_DROP = ['ask'];
+// Aliases with no Copilot tool behind them, dropped from that render rather than emitted as names Copilot ignores:
+// `ask` has no equivalent, and `todo` and `web` are absent from the live tool list quoted below. Dropping them costs
+// nothing that was working — the basher and the orchestrator never had a todo tool on Copilot — and keeps the
+// rendered allowlist honest about what the agent can actually do.
+const COPILOT_ONLY_DROP = ['ask', 'todo', 'web'];
 // Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
 // ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
 // Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
-// `edit` is the same trap as `search`, and the one that cost a run: Copilot ignored the bare alias, so the mapper and the
-// basher rendered with view/bash/grep/glob and no file-write tool at all. The mapper then reported a written
-// docs/CODEMAP.md that was never on disk, because a tool name Copilot does not recognise is dropped silently rather
-// than refused. Its editor family is named for the same shapes as the `view` that `read` matched, so the render writes the
-// alias and every spelling of the write tools: an unrecognised name costs nothing, a missing one costs the agent its
-// job. (?) the exact names still want a live `copilot` check, the way `search` got one.
-const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'], edit: ['edit', 'write', 'create', 'str_replace', 'insert'] };
+// `edit` splits in two on Copilot, and the missing half cost a run. Copilot's write tools are `edit` (change a file
+// that exists) and `create` (make a new one), so the bare alias granted the mapper `edit` and nothing else. Its job is
+// to write docs/CODEMAP.md, which by definition does not exist yet, so it had no tool for the one write it makes:
+// it reported a map that was never on disk and the run carried on unmapped. Checked live against the full list a
+// Copilot agent with no `tools:` key reports: view, grep, glob, bash, read_bash, stop_bash, list_bash, create,
+// edit, reply_to_comment, skill, sql. So `read`→view, `execute`→bash and `search`→grep/glob are all confirmed, and
+// `todo` and `web` have no Copilot tool at all — see COPILOT_ONLY_DROP. `agent` is absent from that list too, but
+// delegation demonstrably works on Copilot (see README caveat 10), so it is left alone pending its own check.
+const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'], edit: ['edit', 'create'] };
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name
@@ -212,11 +218,21 @@ function plan(platform, dest, opts = {}) {
     const rendered = render(read(`${ORCHESTRATOR}.agent.md`), 'claude', { ...opts, file: `${ORCHESTRATOR}.agent.md` });
     const desc = rendered.match(/^description: (.*)$/m)[1];
     const model = rendered.match(/^model: (.*)$/m)[1];
-    const tools = rendered.match(/^tools: (.*)$/m); // absent when the agent has every tool
-    const allowed = tools ? tools[1].replace(/\([^)]*\)/g, '').split(', ') : Object.values(CLAUDE_TOOLS).join(', ').split(', ');
-    // A skill cannot carry the guard, so Bash is force-excluded here regardless of the agent's own allowlist: the
-    // orchestrator's read-only Bash is fine on the main thread (guarded), but unenforced prose on a skill turn.
-    const disallowed = [...new Set([...Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')).filter((t) => !allowed.includes(t)), 'Bash'])];
+    // A skill's disallowed-tools is not scoped to the invoking turn: it reaches every subagent that turn spawns.
+    // Checked live on the desktop app, where this skill is the only way in — the orchestrator beamed down the mapper,
+    // which reported it "had no permission to write files" and returned the map as text. Removing Edit, Write and Bash
+    // here therefore disarms the whole crew, not just the dispatcher. So the list is computed from what every agent in
+    // the pack is allowed, not from the orchestrator alone, and nothing a specialist needs may appear in it.
+    // The cost is the orchestrator's own read-only Bash becoming prose on this path. It always was: a skill carries no
+    // hook, so the guard never ran here, and the disallow was buying a constraint on the dispatcher by removing the
+    // specialists' ability to do their jobs.
+    const crewTools = new Set(files.filter(([p]) => p.startsWith(path.join(dest, "agents") + path.sep))
+      .flatMap(([, text]) => {
+        const m = text.match(/^tools: (.*)$/m);
+        return m ? m[1].replace(/\([^)]*\)/g, "").split(", ").map((t) => t.trim())
+          : Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(", "));
+      }));
+    const disallowed = [...new Set(Object.values(CLAUDE_TOOLS).flatMap((v) => v.split(', ')))].filter((t) => !crewTools.has(t));
     const body = rendered.split(/^---\r?\n/m)[2];
     files.push([path.join(dest, 'skills', ORCHESTRATOR, 'SKILL.md'),
       `---\nname: ${ORCHESTRATOR}\ndescription: ${desc}\ndisable-model-invocation: true\nmodel: ${model}\ndisallowed-tools: ${disallowed.join(', ')}\n---\n\n${body}`]);
