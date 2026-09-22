@@ -4,6 +4,7 @@ description: "Opens or refreshes a pull request from the current branch in the h
 tools: Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*
 skills: ["away-team:pr-format"]
 model: sonnet
+effort: low
 maxTurns: 20
 ---
 

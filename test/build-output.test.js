@@ -14,6 +14,7 @@ const MODEL_TIERS = require('../bin/models.js');
 const modelIds = (platform) => [...new Set(Object.values(MODEL_TIERS).flatMap((rows) => rows.map((r) => r[platform]).filter(Boolean)))];
 const MODELS = { copilot: modelIds('copilot'), claude: modelIds('claude') };
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
+const EFFORT_LEVELS = ['low', 'medium', 'high'];
 const REPORTS = {
   'away-team-mapper': '## Map report',
   'away-team-investigator': '## Diagnosis',
@@ -146,6 +147,39 @@ test('every model is a real model for its platform', () => {
     const m = frontmatter(a.text).match(/^model: (.*)$/m);
     assert.ok(m, `${a.platform}/${a.name}: no model`);
     assert.ok(MODELS[a.platform].includes(m[1]), `${a.platform}/${a.name}: model "${m[1]}" is not in the ${a.platform} tier table`);
+  }
+});
+
+test('reasoning effort renders per platform, and only where the agent sets it', () => {
+  // issue 18: one source key (`effort:`) resolved per platform in render(), like `model:` — `effort:` on Claude
+  // Code, `reasoningEffort:` on Copilot. mapper/pr-writer/basher set it; investigator/orchestrator inherit the
+  // session's effort and must carry neither key on either platform.
+  const EFFORT = { 'away-team-mapper': 'low', 'away-team-pr-writer': 'low', 'away-team-basher': 'medium' };
+  for (const a of all) {
+    const name = a.name.replace(/^away-team:/, '');
+    const fm = frontmatter(a.text);
+    const expected = EFFORT[name];
+    if (a.platform === 'claude') {
+      assert.ok(!/^reasoningEffort:/m.test(fm), `claude/${a.name}: Copilot-only reasoningEffort key`);
+      const m = fm.match(/^effort: (.*)$/m);
+      if (expected) {
+        assert.ok(m, `claude/${a.name}: expected effort: ${expected}`);
+        assert.strictEqual(m[1], expected, `claude/${a.name}: effort is "${m[1]}", expected "${expected}"`);
+        assert.ok(EFFORT_LEVELS.includes(m[1]), `claude/${a.name}: effort "${m[1]}" is not in ${EFFORT_LEVELS.join(', ')}`);
+      } else {
+        assert.ok(!m, `claude/${a.name}: unexpected effort key, should inherit the session's`);
+      }
+    } else {
+      assert.ok(!/^effort:/m.test(fm), `copilot/${a.name}: bare effort key, expected reasoningEffort`);
+      const m = fm.match(/^reasoningEffort: (.*)$/m);
+      if (expected) {
+        assert.ok(m, `copilot/${a.name}: expected reasoningEffort: ${expected}`);
+        assert.strictEqual(m[1], expected, `copilot/${a.name}: reasoningEffort is "${m[1]}", expected "${expected}"`);
+        assert.ok(EFFORT_LEVELS.includes(m[1]), `copilot/${a.name}: reasoningEffort "${m[1]}" is not in ${EFFORT_LEVELS.join(', ')}`);
+      } else {
+        assert.ok(!m, `copilot/${a.name}: unexpected reasoningEffort key, should inherit the session's`);
+      }
+    }
   }
 });
 
@@ -409,6 +443,7 @@ test('the build rejects bad input instead of rendering it', () => {
   const TOOLS = '"read", "search", "execute"';
   for (const [name, mutate, expected] of [
     ['unknown model tier', breakAgent(INV, 'model: strong', 'model: bogus'), /unknown model tier "bogus"/],
+    ['unknown effort level', breakAgent('away-team-basher.agent.md', 'effort: medium', 'effort: bogus'), /unknown effort level "bogus"/],
     ['unknown tool alias', breakAgent(INV, TOOLS, '"read", "telepathy", "execute"'), /unknown tool alias "telepathy"/],
     ['malformed tools entry', breakAgent(INV, TOOLS, '"read(", "execute"'), /bad tools entry "read\("/],
     // issue 17: a tier whose rows have no alias for a platform must fail the build loudly, not render "model: undefined".
