@@ -38,7 +38,13 @@ const COPILOT_ONLY_DROP = ['ask'];
 // Copilot CLI matched `read` and `execute` to its tools but not `search` (checked live: an agent allowed
 // ["read", "search", "execute"] listed view and bash, no grep or glob). Its tools are named grep and glob, and
 // Copilot ignores names it does not recognise, so the render writes the alias and both tool names.
-const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'] };
+// `edit` is the same trap as `search`, and the one that cost a run: Copilot ignored the bare alias, so the mapper and the
+// basher rendered with view/bash/grep/glob and no file-write tool at all. The mapper then reported a written
+// docs/CODEMAP.md that was never on disk, because a tool name Copilot does not recognise is dropped silently rather
+// than refused. Its editor family is named for the same shapes as the `view` that `read` matched, so the render writes the
+// alias and every spelling of the write tools: an unrecognised name costs nothing, a missing one costs the agent its
+// job. (?) the exact names still want a live `copilot` check, the way `search` got one.
+const COPILOT_TOOLS = { search: ['search', 'grep', 'glob'], edit: ['edit', 'write', 'create', 'str_replace', 'insert'] };
 const LEVELS = ['lite', 'full', 'ultra'];
 const PLUGIN = pkg.name.split('/').pop(); // plugin name; Claude Code scopes a plugin's agents and skills as <plugin>:<name>
 const ORCHESTRATOR = 'away-team'; // agents/<ORCHESTRATOR>.agent.md; also the Claude desktop skill's name

@@ -113,6 +113,19 @@ test('the Copilot render names the CLI search tools', () => {
   }
 });
 
+test('the Copilot render names the CLI write tools', () => {
+  // The bare `edit` alias is not a Copilot tool name, and Copilot drops a name it does not recognise without saying so,
+  // which left the mapper and the basher with no way to write a file and no error to report. Every agent that edits must
+  // also name the real write tools, the same belt-and-braces the `search` alias needed.
+  for (const a of agentFiles('copilot')) {
+    const m = frontmatter(a.text).match(/^tools: \[(.*)\]$/m);
+    if (!m?.[1].includes('"edit"')) continue;
+    for (const t of ['"write"', '"create"', '"str_replace"']) {
+      assert.ok(m[1].includes(t), `copilot/${a.name}: edit without ${t}`);
+    }
+  }
+});
+
 test('every allowlisted agent can reach the Azure DevOps MCP server by default', () => {
   // @azure-devops/mcp registers as `ado` (Copilot CLI guide) or `azure-devops` (Claude Code guide); both are in.
   for (const a of all) {
@@ -387,7 +400,7 @@ test('--mcp spells the server the way each platform reads it', () => {
     '["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   // Basher carries an allowlist like everyone else now (#21), so it gets the entries too, in Copilot's spelling.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-basher.agent.md')),
-    '["read", "search", "grep", "glob", "execute", "edit", "todo", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
+    '["read", "search", "grep", "glob", "execute", "edit", "write", "create", "str_replace", "insert", "todo", "ado/*", "azure-devops/*", "github/*", "github/get_issue"]');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
