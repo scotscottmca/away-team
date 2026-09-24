@@ -20,6 +20,7 @@ agents/
   away-team-investigator.agent.md   read-only root cause → Diagnosis
   away-team-basher.agent.md         Diagnosis → failing test → minimal fix → commit
   away-team-pr-writer.agent.md      branch → PR (TL;DR body, breakdown in comments)
+  away-team-reviewer.agent.md       open review threads → small fixes + replies, proposals for the rest
 skills/
   codemap/SKILL.md        CODEMAP.md template + rules
   pr-format/SKILL.md      PR template + gh commands
@@ -77,7 +78,7 @@ What the npx install writes:
 | Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
 | Claude desktop app (no agent picker) | `/away-team <your request>` (plugin install: `/away-team:away-team`) |
 
-Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator never is. Its gates work by stopping to ask you, and a subagent cannot ask, so its description says not to delegate to it, its `tools` allowlist names only its four specialists, and if a session delegates to it anyway it returns `## Blocked` instead of running. To make that a rule of the harness rather than of the description, add `"permissions": { "deny": ["Agent(away-team)"] }` to `~/.claude/settings.json` (`Agent(away-team:away-team)` for the plugin install, which registers it under that scoped name). Headless runs (`claude -p --agent away-team`) still work: the orchestrator refuses only when the harness tells it that it is a subagent, not merely because print mode withholds the ask tool.
+Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the five workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator never is. Its gates work by stopping to ask you, and a subagent cannot ask, so its description says not to delegate to it, its `tools` allowlist names only its five specialists, and if a session delegates to it anyway it returns `## Blocked` instead of running. To make that a rule of the harness rather than of the description, add `"permissions": { "deny": ["Agent(away-team)"] }` to `~/.claude/settings.json` (`Agent(away-team:away-team)` for the plugin install, which registers it under that scoped name). Headless runs (`claude -p --agent away-team`) still work: the orchestrator refuses only when the harness tells it that it is a subagent, not merely because print mode withholds the ask tool.
 
 ## Use
 
@@ -88,6 +89,8 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 | "Fix: <bug>" | investigator → Diagnosis → (gate) → basher → Fix report |
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
+| "Address the review on PR 42" | reviewer, after you confirm the push: fixes the small threads, proposes on the rest, replies on each |
+| "Add feature X" | nothing: away-team is for bugs, so it points you at the default agent |
 
 Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself. The gates only exist on the main thread, so the orchestrator runs as the agent you selected and refuses to run as a subagent.
 
@@ -103,6 +106,7 @@ Agents carry a tier, not a model. The installer resolves the tier per platform, 
 | orchestrator | balanced | classifies and relays; small context, but the gates need judgement |
 | basher | balanced | a strong coder at a fraction of the top tier; the Diagnosis already did the thinking |
 | pr-writer | balanced | short pass; writing quality matters more than reasoning |
+| reviewer | balanced | small local edits the reviewer already specified; big ones go back to the author |
 | investigator | strong | root cause is where reasoning quality pays, and read-only tools keep its output small |
 
 Defaults shipped:

@@ -35,6 +35,7 @@ Every agent is a markdown file with a small frontmatter block: its tools, its mo
 | away-team-investigator | Read-only. Reproduces, localises via git blame, verifies one hypothesis at a time, returns a Diagnosis with file and line evidence |
 | away-team-basher | Takes a Diagnosis, writes the regression test, applies the minimal root-cause fix, runs the suite, commits |
 | away-team-pr-writer | Turns the branch into a PR: conventional-commit title, TL;DR body, inline review comments via the GitHub API |
+| away-team-reviewer | Works through the open review threads: fixes the small ones with a commit each, proposes on the larger ones, replies on every thread |
 | codemap skill | The template and rules for the code map |
 | pr-format skill | The house PR format and the `gh` commands that post it |
 | installer | Renders the agents per platform and installs the companion plugins |
@@ -46,7 +47,7 @@ Agents declare a tier, not a model, so the same file runs on whatever each platf
 | Tier | Used by | Copilot | Claude Code |
 |---|---|---|---|
 | cheap | mapper | GPT-5.6 Luna | haiku |
-| balanced | orchestrator, basher, pr-writer | Claude Sonnet 5 | sonnet |
+| balanced | orchestrator, basher, pr-writer, reviewer | Claude Sonnet 5 | sonnet |
 | strong | investigator | Claude Opus 5 | opus |
 
 The mapping is an ordered priority list per tier in `bin/models.js`: the first row that names the platform wins, so a plan-only model is added by prepending a row rather than overwriting the default. Claude's aliases resolve to the newest model of each tier on their own; the Copilot column is the cheapest model on the per-token price list that does the job.

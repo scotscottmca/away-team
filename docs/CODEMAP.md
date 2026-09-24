@@ -2,7 +2,7 @@
 commit: ed90d21be147eb20d7f7bdb9b079f0d753f1a118   updated: 2026-09-22   by: mapper
 
 ## What this is
-A multi-agent orchestrator framework for GitHub Copilot and Claude Code that beams down a crew of specialist agents (mapper, investigator, basher, pr-writer) to fix bugs end-to-end. The orchestrator classifies requests, gates decisions, and relays structured reports from specialists. Built for installation into `~/.copilot/`, `~/.claude/`, or `.github/.copilot/` per repo, it delegates to a strong-tier root-cause specialist (investigator), then a balanced-tier fixer (basher), then a PR writer, minimizing tokens by keeping each agent's context narrow and read-only where appropriate.
+A multi-agent orchestrator framework for GitHub Copilot and Claude Code that beams down a crew of specialist agents (mapper, investigator, basher, pr-writer, reviewer) to fix bugs end-to-end. The orchestrator classifies requests, gates decisions, and relays structured reports from specialists. Built for installation into `~/.copilot/`, `~/.claude/`, or `.github/.copilot/` per repo, it delegates to a strong-tier root-cause specialist (investigator), then a balanced-tier fixer (basher), then a PR writer, minimizing tokens by keeping each agent's context narrow and read-only where appropriate.
 
 ## Stack
 Node.js 20.19.0+, JavaScript, npm, Biome (linter), npm test (TAP).
@@ -20,16 +20,17 @@ MCP servers (GitHub, Azure DevOps, Jira, generic) allowed; read-only enforcement
 ## Entry points
 | Entry | Kind | Where | Notes |
 |---|---|---|---|
-| Orchestrator | Claude Code / Copilot agent | `agents/away-team.agent.md` | Routes to 4 specialists via delegation; gates with AskUserQuestion before edit/push |
+| Orchestrator | Claude Code / Copilot agent | `agents/away-team.agent.md` | Routes to 5 specialists via delegation; gates with AskUserQuestion before edit/push |
 | Mapper | Claude Code / Copilot agent | `agents/away-team-mapper.agent.md` | Writes `docs/CODEMAP.md` only; refreshes on diff if exists |
 | Investigator | Claude Code / Copilot agent | `agents/away-team-investigator.agent.md` | Read-only (enforced by hook); returns `## Diagnosis` or `## Blocked` |
 | Basher | Claude Code / Copilot agent | `agents/away-team-basher.agent.md` | Applies Diagnosis, writes commit, not push; returns `## Fix report` or `## Blocked` |
 | PR writer | Claude Code / Copilot agent | `agents/away-team-pr-writer.agent.md` | Creates/updates PR, posts breakdown comments; returns `## PR report` or `## Blocked` |
+| Reviewer | Claude Code / Copilot agent | `agents/away-team-reviewer.agent.md` | Answers open PR review threads: small fixes committed, larger ones proposed, a reply on each; returns `## Revision report` or `## Blocked` |
 | Installer | CLI | `bin/away-team.js` | Detects platform, prompts for scope/target, renders dist/, installs to filesystem or skips plugins |
 
 ## Modules
 ### Orchestrator (agents/away-team.agent.md)
-Routes "map", "investigate", "fix", "pr" intents to specialists; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
+Routes "map", "investigate", "fix", "pr", "review" intents to specialists, and turns non-bug work away to the default agent; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
 
 ### Mapper (agents/away-team-mapper.agent.md)
 Writes `docs/CODEMAP.md` (entry points, module boundaries, data flow, invariants, verified build/test commands). Refreshes on diff if the map exists and `commit:` header is recent. Maxturns: 50. Cheap tier. Inventory only (no whole-file reads): project files, CI config, README, top-level dirs, entry-point traces, hot spots (6-month git log). Output: `## Map report` or `## Blocked`.
@@ -42,6 +43,9 @@ Applies a Diagnosis or fully-specified change. Regression test first, smallest r
 
 ### PR writer (agents/away-team-pr-writer.agent.md)
 Opens or refreshes a PR from current branch. Conventional-commit title, TL;DR body (25 lines max), full breakdown as inline review comments (with line-specific reasoning) and one top-level comment (narrative, rejected alternatives, follow-ups). Balanced tier. Maxturns: 20. Prefers GitHub MCP server; falls back to `gh` if no MCP. Never force-pushes, rewrites remote, or adds/removes remotes. Output: `## PR report` (URL, pushed yes/no, comment count) or `## Blocked`.
+
+### Reviewer (agents/away-team-reviewer.agent.md)
+Works through a PR's unresolved review threads. Classifies each as fix (small, local, unambiguous), propose (multi-file, contract, auth/crypto/billing/migration, design question) or answered. One commit per fix, test first for behaviour changes, pushes and replies only when the handoff says the push was confirmed, re-requests changes-requested reviewers. Never resolves threads or force-pushes. Balanced tier. Maxturns: 40; about eight fix threads per run. Output: `## Revision report` or `## Blocked`.
 
 ### Installer / Builder (bin/away-team.js)
 `npx @scotscottmca/away-team` or `npm run build`. Renders agents from `agents/*.md` and skills from `skills/*/` to platform-specific output: `dist/copilot/` and `dist/claude/` (plugins), or `~/.copilot/`, `~/.claude/`, `.github/copilot/`, `.claude/` (direct install). Drops Claude-only keys (maxTurns, disallowedTools, permissionMode, skills, hooks) from Copilot render; drops Copilot-only keys (disable-model-invocation) from Claude. Resolves tier → model from `bin/models.js` per platform. Wires `readonly-guard.js` hook with `--agent` flags for each guarded agent.
@@ -93,6 +97,7 @@ Each specialist returns exactly one structured block (markdown):
 - Mapper: `## Map report` (Path, Changed sections, Unverified (?)-count) or `## Blocked`
 - Investigator: `## Diagnosis` (Symptom, Root cause, Evidence, Reproduction, Confidence, Fix recommendation, Regression test, Ruled out, Risk) or `## Blocked`
 - Basher: `## Fix report` (Change, Why here, Tests before/after, Codemap, Commit) or `## Blocked`
+- Reviewer: `## Revision report` (PR, Fixed, Proposed, Answered, Left open, Tests, Pushed, Re-requested) or `## Blocked`
 - PR writer: `## PR report` (PR URL, Pushed yes/no, Comments count) or `## Blocked`
 - All: `## Blocked` (Stage, Reason, Tried, Side effects, Next cheapest step, Needs)
 
@@ -115,7 +120,7 @@ Each agent declares a tier (cheap, balanced, strong). Installer reads `bin/model
 
 4. **Orchestrator gates.** Before basher: confidence high? Fix touches auth/crypto/billing/data migration? User asked for fix? Before pr-writer: user confirmed push? GitHub set up (MCP or authenticated `gh`)? (Reason: gates are cheap; stopping to ask costs one turn, less than re-doing a wrong fix or recovering from an unauthenticated push.)
 
-5. **Model tiers, not model names.** Agents carry tiers; installer resolves per platform from `bin/models.js`. Tiers: cheap (mapper), balanced (orchestrator, basher, pr-writer), strong (investigator). Owned by installer and `bin/models.js`; agents do not mention model names. (Reason: decouple agent logic from subscription plan; edit one file to upgrade.)
+5. **Model tiers, not model names.** Agents carry tiers; installer resolves per platform from `bin/models.js`. Tiers: cheap (mapper), balanced (orchestrator, basher, pr-writer, reviewer), strong (investigator). Owned by installer and `bin/models.js`; agents do not mention model names. (Reason: decouple agent logic from subscription plan; edit one file to upgrade.)
 
 6. **Hooks wired per agent.** `hooks/readonly-guard.js` called from each agent's frontmatter hook or `.claude/hooks/hooks.json` on plugin build, with `--agent <name>` flags so the guard knows which agent to enforce. (Reason: Claude Code ignores frontmatter hooks on plugin agents; project scope must work on web containers with no setup step.)
 

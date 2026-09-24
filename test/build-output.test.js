@@ -23,6 +23,7 @@ const REPORTS = {
   'away-team-investigator': '## Diagnosis',
   'away-team-basher': '## Fix report',
   'away-team-pr-writer': '## PR report',
+  'away-team-reviewer': '## Revision report',
 };
 
 const dist = (...p) => path.join(ROOT, 'dist', ...p);
@@ -93,7 +94,7 @@ test('no Claude-only key reaches the Copilot render', () => {
 // file the Copilot plugin does not ship.
 test('the Copilot plugin render keeps bare specialist names and ships no hooks', () => {
   assert.ok(!fs.existsSync(dist('copilot', 'hooks')), 'copilot: hooks/ shipped, but the guard is Claude Code only');
-  const specialists = ['away-team-basher', 'away-team-investigator', 'away-team-mapper', 'away-team-pr-writer'];
+  const specialists = ['away-team-basher', 'away-team-investigator', 'away-team-mapper', 'away-team-pr-writer', 'away-team-reviewer'];
   for (const a of agentFiles('copilot')) {
     const body = a.text.split(/\r?\n/).filter((l) => !l.startsWith('name:')).join('\n');
     for (const s of specialists) {
@@ -178,9 +179,9 @@ test('every model is a real model for its platform', () => {
 
 test('reasoning effort renders per platform, and only where the agent sets it', () => {
   // issue 18: one source key (`effort:`) resolved per platform in render(), like `model:` — `effort:` on Claude
-  // Code, `reasoningEffort:` on Copilot. mapper/pr-writer/basher set it; investigator/orchestrator inherit the
+  // Code, `reasoningEffort:` on Copilot. mapper/pr-writer/basher/reviewer set it; investigator/orchestrator inherit the
   // session's effort and must carry neither key on either platform.
-  const EFFORT = { 'away-team-mapper': 'low', 'away-team-pr-writer': 'low', 'away-team-basher': 'medium' };
+  const EFFORT = { 'away-team-mapper': 'low', 'away-team-pr-writer': 'low', 'away-team-basher': 'medium', 'away-team-reviewer': 'medium' };
   for (const a of all) {
     const name = a.name.replace(/^away-team:/, '');
     const fm = frontmatter(a.text);
