@@ -30,7 +30,7 @@ MCP servers (GitHub, Azure DevOps, Jira, generic) allowed; read-only enforcement
 
 ## Modules
 ### Orchestrator (agents/away-team.agent.md)
-Routes "map", "investigate", "fix", "pr", "review" intents to specialists, and turns non-bug work away to the default agent; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
+Routes "map", "investigate", "fix", "pr", "review" intents to specialists, and turns non-bug work away to the default agent; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer / reviewer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
 
 ### Mapper (agents/away-team-mapper.agent.md)
 Writes `docs/CODEMAP.md` (entry points, module boundaries, data flow, invariants, verified build/test commands). Refreshes on diff if the map exists and `commit:` header is recent. Maxturns: 50. Cheap tier. Inventory only (no whole-file reads): project files, CI config, README, top-level dirs, entry-point traces, hot spots (6-month git log). Output: `## Map report` or `## Blocked`.
@@ -68,6 +68,8 @@ TAP test suite. Verifies frontmatter syntax in all agents (source and rendered),
 - "Map this repo" → delegates to **mapper** → writes `docs/CODEMAP.md` → **Map report** → user sees commit sha, changed sections, unverified (?) marks
 - "Why does X throw on Y?" / stack trace → **investigator** (read-only: reproduce, localize via git log/blame, one-at-a-time hypothesis, grep callers) → **Diagnosis** (symptom, root cause, path:line evidence, confidence, fix recommendation) → orchestrator gates (confidence high? auth/crypto/billing/migration? user asked for fix?) → stops if gate fails
 - "Fix: <bug>" → **investigator** → **Diagnosis** → (gate) → **basher** → regression test (reproduces, fails), minimal fix at root-cause location (shared caller point), run affected tests → **Fix report** (change, tests before/after, commit sha) → orchestrator gates (push confirmed? GitHub set up?) → **pr-writer** → creates branch if needed, pushes, creates/updates PR, posts breakdown comments → **PR report** (URL, pushed yes/no, comment count)
+- "Address the review on PR N" → (gate: confirm push, GitHub set up) → **reviewer** → unresolved threads classified fix / propose / answered → one commit per fix, affected tests, push, a reply on every thread, re-request changes-requested reviewers → **Revision report**
+- "Add / build / implement / refactor" with no defect → no delegation; one line pointing at the default agent
 
 **Installer flow:** `npx @scotscottmca/away-team [flags]` → detects platform (Copilot? Claude Code?) → prompts for scope (global / project) and target (copilot / claude / all) unless `--yes` → resolves tiers from `bin/models.js` → renders agents/ and skills/ to dist/ (both platforms) → if not `--skip-plugins`, calls plugin marketplaces; if global/project scope, writes to `~/.copilot/`, `~/.claude/`, `.github/`, `.claude/` → wires hook commands with `--agent` flags for guarded agents. SessionStart hook on Claude Code web containers: `npm install`, then `npm run build --target claude --scope project` to use fresh agents from the working tree (not committed output).
 
@@ -82,8 +84,9 @@ None internal. Reads from:
 
 Writes to:
 - `docs/CODEMAP.md` (mapper only)
-- Git commits (basher only, no push)
+- Git commits (basher, no push; reviewer, pushed only when the user confirmed)
 - PR/issue creation (pr-writer; investigator/orchestrator file only)
+- PR review-thread replies and review re-requests (reviewer only; never resolves a thread)
 - `dist/copilot/`, `dist/claude/` (installer/builder; committed)
 - `~/.copilot/`, `~/.claude/`, `.github/`, `.claude/` (installer; gitignored)
 
@@ -112,13 +115,13 @@ Each agent declares a tier (cheap, balanced, strong). Installer reads `bin/model
 **Plugins**: `dist/copilot/plugin.json`, `dist/claude/.claude-plugin/plugin.json` plus agents/skills. Submitted to marketplaces.
 
 ## Invariants and conventions
-1. **Read-only specialists.** Investigator and orchestrator Bash/MCP are read-only enforced by `hooks/readonly-guard.js` (28a781cb; reason: minimize context by ruling out risky writes; agents declare intent; cheaper than re-reading the whole repo to verify they obeyed). Mapper reads only; writes `docs/CODEMAP.md` once. Basher and pr-writer write: test file, git commit, PR.
+1. **Read-only specialists.** Investigator and orchestrator Bash/MCP are read-only enforced by `hooks/readonly-guard.js` (28a781cb; reason: minimize context by ruling out risky writes; agents declare intent; cheaper than re-reading the whole repo to verify they obeyed). Mapper reads only; writes `docs/CODEMAP.md` once. Basher, pr-writer and reviewer write: test file, git commit, PR, review-thread replies.
 
 2. **One report per agent.** Each specialist returns exactly one block: `## <Report>` or `## Blocked`. No extra sections, no "found in passing", no partial transcripts. orchestrator relays verbatim once; never re-verifies or improvises. (Reason: output costs ~5x input; each word is expensive; truncated reports go to next specialist once.)
 
 3. **No side effects on Blocked.** If an agent returns `## Blocked`, it changed nothing. Files, commits, branches, remotes listed under Side effects mean the agent is stuck mid-change; that state must be manually resolved before the pipeline can retry or continue.
 
-4. **Orchestrator gates.** Before basher: confidence high? Fix touches auth/crypto/billing/data migration? User asked for fix? Before pr-writer: user confirmed push? GitHub set up (MCP or authenticated `gh`)? (Reason: gates are cheap; stopping to ask costs one turn, less than re-doing a wrong fix or recovering from an unauthenticated push.)
+4. **Orchestrator gates.** Before basher: confidence high? Fix touches auth/crypto/billing/data migration? User asked for fix? Before pr-writer or reviewer: user confirmed push? GitHub set up (MCP or authenticated `gh`)? (Reason: gates are cheap; stopping to ask costs one turn, less than re-doing a wrong fix or recovering from an unauthenticated push.)
 
 5. **Model tiers, not model names.** Agents carry tiers; installer resolves per platform from `bin/models.js`. Tiers: cheap (mapper), balanced (orchestrator, basher, pr-writer, reviewer), strong (investigator). Owned by installer and `bin/models.js`; agents do not mention model names. (Reason: decouple agent logic from subscription plan; edit one file to upgrade.)
 
@@ -130,14 +133,14 @@ Each agent declares a tier (cheap, balanced, strong). Installer reads `bin/model
 
 9. **Contracts are sources of truth.** Agent frontmatter (YAML block), report blocks (markdown), `bin/models.js` (tier resolution), `hooks/hooks.json` and `.claude/settings.json` (hook wiring), `skills/*/SKILL.md` (templates). Each owned by its side; changes propagate via installer or source-control commits. (Reason: no duplication; drift is caught by tests.)
 
-10. **No outside reads.** Specialists read only the repo they were given; no fetching docs, no web searches, no second-guessing from the internet. investigator and orchestrator allowed: git log, MCP servers on this machine, temp scripts. basher and pr-writer: repo only, plus basher reads CODEMAP. (Reason: context window is the budget; external reads are expensive and often wrong.)
+10. **No outside reads.** Specialists read only the repo they were given; no fetching docs, no web searches, no second-guessing from the internet. investigator and orchestrator allowed: git log, MCP servers on this machine, temp scripts. basher, pr-writer and reviewer: repo only (plus the PR's review threads for reviewer), and basher and reviewer read CODEMAP. (Reason: context window is the budget; external reads are expensive and often wrong.)
 
 ## Hot spots
 `bin/away-team.js` (469 lines): installer logic, platform detection, prompts, rendering template substitution, model tier resolution, hook wiring. High-touch on each install or build. Testing: `test/build-output.test.js` catches render regressions.
 
 `hooks/readonly-guard.js` (117 lines): regex-based Bash and MCP tool call validation. High-risk: must block all writes to get investigator/orchestrator trust without enforcement. Testing: TAP tests verify every write-shaped command is blocked, allowed commands pass.
 
-`agents/away-team.agent.md` (82 lines): orchestrator routing logic, gate conditions, handoff payloads. High-touch on bug flow. Must not improvise when a specialist is blocked; must relay reports without re-analyzing.
+`agents/away-team.agent.md` (85 lines): orchestrator routing logic, gate conditions, handoff payloads. High-touch on bug flow. Must not improvise when a specialist is blocked; must relay reports without re-analyzing.
 
 `agents/away-team-investigator.agent.md` (76 lines): reproduces bugs, root-causes, outputs diagnosis. Strong tier; on Claude, the most expensive agent. Context budget critical: search before reading; batched tool calls; ~25 calls → Blocked if no cause.
 

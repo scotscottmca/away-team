@@ -2,7 +2,7 @@
 
 # away-team
 
-An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
+An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR, answer the review. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
 
 The point is spending fewer tokens on bug work without losing quality. Six things do that:
 
@@ -149,7 +149,7 @@ npx @scotscottmca/away-team --mcp jira,github   # plus these, for a server disco
 npx @scotscottmca/away-team --no-mcp            # none; isolation, not cost (~11 tokens a tool)
 ```
 
-Two servers are named by default whether or not they are discovered, since `dist/` is shared and cannot be discovered for. The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). The GitHub server, `github`, is named for the same reason a hosted or remote session gives the crew: `gh` is not installed there, so pr-writer and the read-only guard's issue-filing exception (see Design notes) need the MCP path instead.
+Two servers are named by default whether or not they are discovered, since `dist/` is shared and cannot be discovered for. The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). The GitHub server, `github`, is named for the same reason a hosted or remote session gives the crew: `gh` is not installed there, so pr-writer, reviewer and the read-only guard's issue-filing exception (see Design notes) need the MCP path instead.
 
 To grant one tool rather than a whole server, pass the Claude spelling and the installer translates it: `--mcp mcp__github__get_issue` renders `mcp__github__get_issue` on Claude Code and `github/get_issue` on Copilot. Or edit the installed agent file and add the entry to `tools:` yourself in the platform's spelling.
 
