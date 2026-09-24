@@ -158,6 +158,43 @@ test('every allowlisted agent can reach the GitHub MCP server by default', () =>
   }
 });
 
+test('every Claude agent that names an MCP server can also load its deferred tools', () => {
+  // Claude Code defers MCP tools in hosted and remote sessions: absent from the agent's tool list, and a direct call
+  // fails, until ToolSearch fetches the schema. An allowlist is deny-by-default, so without ToolSearch on it an agent
+  // that names mcp__github__* has a server it can neither see nor reach — and reading its own tool list, it concludes
+  // the server is not configured. That is the failure this guards: the orchestrator reported "no authenticated GitHub
+  // MCP" on a hosted session that had one, and stalled, with no `gh` binary and no web fetch to fall back to.
+  for (const a of agentFiles('claude')) {
+    const tools = frontmatter(a.text).match(/^tools: (.*)$/m)?.[1];
+    if (!tools?.includes('mcp__')) continue;
+    assert.ok(tools.split(', ').includes('ToolSearch'), `claude/${a.name}: names an MCP server but cannot load its tools`);
+  }
+});
+
+test('the orchestrator can fetch a URL but cannot search the web', () => {
+  // `fetch` is `web` without the search half. Reading an issue the user named is the orchestrator's job when the
+  // tracker is unreachable; going looking is not, and nothing in this pack should be browsing.
+  const o = agentFiles('claude').find((a) => a.name.replace(/^away-team:/, '') === 'away-team');
+  const tools = frontmatter(o.text).match(/^tools: (.*)$/m)[1].split(', ');
+  assert.ok(tools.includes('WebFetch'), 'claude orchestrator cannot fetch a URL');
+  assert.ok(!tools.includes('WebSearch'), 'claude orchestrator can search the web');
+  for (const a of agentFiles('claude').filter((x) => x.name.replace(/^away-team:/, '') !== 'away-team')) {
+    const t = frontmatter(a.text).match(/^tools: (.*)$/m)?.[1] || '';
+    assert.ok(!/\bWebFetch\b/.test(t), `claude/${a.name}: a specialist has WebFetch; only the orchestrator gets it`);
+  }
+  for (const a of agentFiles('copilot')) {
+    assert.ok(!/WebFetch|"fetch"/.test(frontmatter(a.text)), `copilot/${a.name}: carries a Claude-only fetch tool`);
+  }
+});
+
+test('the Copilot render never names ToolSearch', () => {
+  // ToolSearch is a Claude Code mechanism and has no known Copilot equivalent. Copilot silently drops a name it does
+  // not recognise, so this costs nothing there either way — but the rendered allowlist stays honest about what exists.
+  for (const a of agentFiles('copilot')) {
+    assert.ok(!/ToolSearch/.test(frontmatter(a.text)), `copilot/${a.name}: carries ToolSearch, which is not a Copilot tool`);
+  }
+});
+
 test('pr-writer prefers the GitHub MCP path but keeps the gh fallback', () => {
   // Issue 14: `gh` is unavailable in hosted/remote sessions. pr-writer must try MCP first and fall back to `gh`,
   // never gate on `gh` alone — a bare "no gh -> Blocked" sentence would kill the step before MCP gets a chance.
@@ -241,6 +278,31 @@ test('each specialist has exactly one report block and exactly one Blocked block
   }
 });
 
+test('the investigator carries the Review block as well as the Diagnosis', () => {
+  // A review is a second opinion on an issue that already has comments and proposed fixes on it. Routing it to the
+  // investigator without giving it somewhere to land put it straight into the numbered method, where step 2 says never
+  // write a Diagnosis without a reproduction — so a feature request with nothing to reproduce came back Blocked, at a
+  // full cold start per item. The Review block is where that job returns instead.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team-investigator')) {
+    assert.strictEqual(count(a.text, '## Review'), 1, `${a.platform}/${a.name}: expected one "## Review"`);
+    assert.ok(/never Blocks for want of a reproduction/.test(a.text),
+      `${a.platform}/${a.name}: a review can still be gated on reproducing something`);
+    assert.ok(/Not checked:/.test(a.text), `${a.platform}/${a.name}: Review has no unchecked-claims line`);
+  }
+});
+
+test('the orchestrator routes review and never lets one reach the basher', () => {
+  // A Review is an opinion, not a Diagnosis. Letting one authorise a fix would put the basher to work on a proposal
+  // nobody root-caused, which is the expensive call the Cost section exists to prevent.
+  for (const a of all.filter((x) => x.name.replace(/^away-team:/, '') === 'away-team')) {
+    assert.ok(/\*\*review\*\*/.test(a.text), `${a.platform}/${a.name}: no review intent in Routing`);
+    assert.ok(/`## Review`/.test(a.text), `${a.platform}/${a.name}: routing never names the Review report`);
+    // The Claude plugin render scopes specialist names to <plugin>:<name>, so match either spelling.
+    assert.ok(/never goes to (away-team:)?away-team-basher/.test(a.text),
+      `${a.platform}/${a.name}: a Review is not barred from the basher`);
+  }
+});
+
 test('the Claude desktop skill body is the orchestrator body', () => {
   const skill = fs.readFileSync(dist('claude', 'skills', 'away-team', 'SKILL.md'), 'utf8');
   const agent = fs.readFileSync(dist('claude', 'agents', 'away-team.md'), 'utf8');
@@ -263,7 +325,10 @@ test('the plugin wires the read-only guard from hooks.json, and the guard blocks
   // A skill's disallowed-tools reaches the subagents its turn spawns (checked live: the mapper could not write a file),
   // so the skill must not remove anything a specialist needs. Bash, Edit and Write are the ones that disarmed the crew.
   const skillDisallowed = skill.match(/^disallowed-tools: (.*)$/m)[1].split(', ');
-  for (const t of ['Bash', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite']) {
+  // WebFetch joined that list for its own reason: it is the orchestrator's last door to an issue, the only one
+  // needing no server, no connector and no `gh`. A live run proved the cost — the GitHub connector was registered
+  // but never connected, `gh` was absent, and six correct WebFetch calls at the right issue URLs were denied here.
+  for (const t of ['Bash', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite', 'WebFetch']) {
     assert.ok(!skillDisallowed.includes(t), `desktop skill disallows ${t}, which a specialist it spawns needs`);
   }
   const hooks = JSON.parse(fs.readFileSync(dist('claude', 'hooks', 'hooks.json'), 'utf8')).hooks;
@@ -349,7 +414,10 @@ test('an install gives the whole crew every MCP server the machine has', () => {
 
   install(['--no-mcp']);
   const off = fs.readFileSync(path.join(home, '.claude', 'agents', 'away-team-investigator.md'), 'utf8');
-  assert.ok(!/mcp__/.test(off.match(/^tools: (.*)$/m)[1]), '--no-mcp still granted MCP servers');
+  const offTools = off.match(/^tools: (.*)$/m)[1];
+  assert.ok(!/mcp__/.test(offTools), '--no-mcp still granted MCP servers');
+  // ToolSearch rides along with the MCP entries it exists to load; with none named there is nothing for it to fetch.
+  assert.ok(!offTools.split(', ').includes('ToolSearch'), '--no-mcp still granted ToolSearch');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -409,7 +477,7 @@ test('--mcp spells the server the way each platform reads it', () => {
   const tools = (p) => fs.readFileSync(p, 'utf8').match(/^tools: (.*)$/m)[1];
   // Claude Code subagents: mcp__<server>__* for a server, a full tool name passes through.
   assert.strictEqual(tools(path.join(home, '.claude', 'agents', 'away-team-investigator.md')),
-    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, mcp__github__get_issue');
+    'Read, Grep, Glob, Bash, mcp__ado__*, mcp__azure-devops__*, mcp__github__*, mcp__github-mcp-server__*, mcp__github__get_issue, ToolSearch');
   // Copilot custom agents: <server>/* for a server, <server>/<tool> for one tool. Checked live on Copilot CLI: the bare
   // name put no tool from the server in the investigator's list; <server>/* put them all in.
   assert.strictEqual(tools(path.join(home, '.copilot', 'agents', 'away-team-investigator.agent.md')),

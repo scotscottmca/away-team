@@ -30,7 +30,7 @@ MCP servers (GitHub, Azure DevOps, Jira, generic) allowed; read-only enforcement
 
 ## Modules
 ### Orchestrator (agents/away-team.agent.md)
-Routes "map", "investigate", "fix", "pr", "review" intents to specialists, and turns non-bug work away to the default agent; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer / reviewer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
+Routes "map", "investigate", "review" (investigator second opinion on an issue), "fix", "pr", "revise" (reviewer answers PR review threads) intents to specialists, and turns non-bug work away to the default agent; gates before basher (confidence, auth/crypto/billing/migration, no-fix case) and pr-writer / reviewer (confirm push, GitHub setup). Balanced tier, no model invocation (disable-model-invocation: true). Read-only Bash and MCP via hook. Relays only the latest report per specialist; never re-verifies or improvises. Subagents are stateless; every word costs ~5x input. Cannot run as a subagent (returns Blocked if harness says so).
 
 ### Mapper (agents/away-team-mapper.agent.md)
 Writes `docs/CODEMAP.md` (entry points, module boundaries, data flow, invariants, verified build/test commands). Refreshes on diff if the map exists and `commit:` header is recent. Maxturns: 50. Cheap tier. Inventory only (no whole-file reads): project files, CI config, README, top-level dirs, entry-point traces, hot spots (6-month git log). Output: `## Map report` or `## Blocked`.

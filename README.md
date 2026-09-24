@@ -86,11 +86,16 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 |---|---|
 | "Map this repo" | mapper → `docs/CODEMAP.md` |
 | "Why does X throw on Y?" / paste a stack trace | investigator → Diagnosis, stops |
+| "Review #148" / "second opinion on these six issues" | investigator, one per item → Review, stops |
 | "Fix: <bug>" | investigator → Diagnosis → (gate) → basher → Fix report |
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
 | "Address the review on PR 42" | reviewer, after you confirm the push: fixes the small threads, proposes on the rest, replies on each |
 | "Add feature X" | nothing: away-team is for bugs, so it points you at the default agent |
+
+**Review** is the investigator's second job, and the one that is not a bug. An issue that already carries comments, proposed approaches and half-agreed fixes wants a second opinion on what is on the table, not a root cause — so the investigator reads the item and every comment through your tracker, checks each proposal against the code, and returns a `## Review`: verdict, `path:line` evidence, what the change would touch, and an explicit list of the claims it did **not** verify. A review never Blocks for want of a reproduction, one item goes to one specialist (six issues is six calls), and a Review is an opinion, never an authorisation — it cannot send the basher to work. Building what a review endorsed is a fix request, and starts over.
+
+**Revise** is the other direction: someone has reviewed *your* PR and you want the feedback acted on. That goes to the reviewer, not the investigator. It fixes the small, unambiguous threads with a commit each, puts a proposal on the rest for the author to decide, and replies on every thread once you have confirmed the push.
 
 Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself. The gates only exist on the main thread, so the orchestrator runs as the agent you selected and refuses to run as a subagent.
 
@@ -151,7 +156,11 @@ npx @scotscottmca/away-team --no-mcp            # none; isolation, not cost (~11
 
 Two servers are named by default whether or not they are discovered, since `dist/` is shared and cannot be discovered for. The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). The GitHub server, `github`, is named for the same reason a hosted or remote session gives the crew: `gh` is not installed there, so pr-writer, reviewer and the read-only guard's issue-filing exception (see Design notes) need the MCP path instead.
 
-To grant one tool rather than a whole server, pass the Claude spelling and the installer translates it: `--mcp mcp__github__get_issue` renders `mcp__github__get_issue` on Claude Code and `github/get_issue` on Copilot. Or edit the installed agent file and add the entry to `tools:` yourself in the platform's spelling.
+**On Claude Code every allowlist that names a server also carries `ToolSearch`, and it is not optional.** Claude Code defers MCP tools in hosted and remote sessions: the schemas are not loaded, the tools are missing from the agent's live tool list, and a direct call fails until `ToolSearch` fetches them by name or keyword. Naming `mcp__github__*` therefore grants a server the agent can neither see nor reach, and an agent that reads its own tool list concludes the server is not configured — which is what happened: the orchestrator reported it had "no authenticated GitHub MCP" on a hosted session that had one, and stopped, because `gh` is not installed there and the skill render removes `WebFetch`. Three doors, all of them shut, and the server behind the middle one was open the whole time. `ToolSearch` rides along with the MCP entries it exists to load and is left out under `--no-mcp`; it grants nothing new, since loading a schema is not permission to call it and the allowlist still decides that. The crew's prose says the same thing in the place each agent needs it: an empty tool list is never evidence that a server is absent. There is no known Copilot equivalent, so that render does not carry it.
+
+**A server on the list is not the same as a server you can call.** A connector that is registered but never connected carries no tools: `ToolSearch` finds nothing, and the agent sees exactly what it would see if the server had never been installed. That is a real failure this pack hit — the orchestrator reported "no authenticated GitHub MCP", which was precisely true and read as "no GitHub server", and nobody thought to look at `/mcp` and press Connect. So the crew names which one it found and what would fix it, rather than reporting the server missing.
+
+To grant one tool rather than a whole server, pass the Claude spelling and the installer translates it: `--mcp mcp__github__issue_read` renders `mcp__github__issue_read` on Claude Code and `github/issue_read` on Copilot. Or edit the installed agent file and add the entry to `tools:` yourself in the platform's spelling.
 
 The investigator and the orchestrator are the exception, and only on Claude Code: each reads through every server like the rest of the crew, but the read-only guard rejects an MCP call whose tool name looks mutating, the same way it rejects write-shaped Bash. Reading a work item to root-cause a bug is evidence; updating one is the basher's job. Filing is the single exception: creating an issue or a work item goes through (see Design notes).
 
