@@ -2,7 +2,7 @@
 
 # away-team
 
-An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
+An orchestrator that beams down a crew of specialist agents to fix a bug: map the codebase, find the root cause, bash the bug, open the PR, answer the review. Built for GitHub Copilot (CLI and desktop app) and Claude Code (CLI and desktop app), installed user-level so it works in every repo and every language.
 
 The point is spending fewer tokens on bug work without losing quality. Six things do that:
 
@@ -20,6 +20,7 @@ agents/
   away-team-investigator.agent.md   read-only root cause → Diagnosis
   away-team-basher.agent.md         Diagnosis → failing test → minimal fix → commit
   away-team-pr-writer.agent.md      branch → PR (TL;DR body, breakdown in comments)
+  away-team-reviewer.agent.md       open review threads → small fixes + replies, proposals for the rest
 skills/
   codemap/SKILL.md        CODEMAP.md template + rules
   pr-format/SKILL.md      PR template + gh commands
@@ -77,7 +78,7 @@ What the npx install writes:
 | Claude Code, any project, always | `"agent": "away-team"` in that project's `.claude/settings.json` |
 | Claude desktop app (no agent picker) | `/away-team <your request>` (plugin install: `/away-team:away-team`) |
 
-Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the four workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator never is. Its gates work by stopping to ask you, and a subagent cannot ask, so its description says not to delegate to it, its `tools` allowlist names only its four specialists, and if a session delegates to it anyway it returns `## Blocked` instead of running. To make that a rule of the harness rather than of the description, add `"permissions": { "deny": ["Agent(away-team)"] }` to `~/.claude/settings.json` (`Agent(away-team:away-team)` for the plugin install, which registers it under that scoped name). Headless runs (`claude -p --agent away-team`) still work: the orchestrator refuses only when the harness tells it that it is a subagent, not merely because print mode withholds the ask tool.
+Any worker can be selected directly too (`/agent` → away-team-mapper, and so on). In Claude Code the five workers are also picked up automatically by any normal session because subagents auto-delegate on description. The orchestrator never is. Its gates work by stopping to ask you, and a subagent cannot ask, so its description says not to delegate to it, its `tools` allowlist names only its five specialists, and if a session delegates to it anyway it returns `## Blocked` instead of running. To make that a rule of the harness rather than of the description, add `"permissions": { "deny": ["Agent(away-team)"] }` to `~/.claude/settings.json` (`Agent(away-team:away-team)` for the plugin install, which registers it under that scoped name). Headless runs (`claude -p --agent away-team`) still work: the orchestrator refuses only when the harness tells it that it is a subagent, not merely because print mode withholds the ask tool.
 
 ## Use
 
@@ -89,8 +90,12 @@ Any worker can be selected directly too (`/agent` → away-team-mapper, and so o
 | "Fix: <bug>" | investigator → Diagnosis → (gate) → basher → Fix report |
 | "…and open a PR" | pr-writer, after you confirm the push |
 | "Open a PR for this branch" | pr-writer only |
+| "Address the review on PR 42" | reviewer, after you confirm the push: fixes the small threads, proposes on the rest, replies on each |
+| "Add feature X" | nothing: away-team is for bugs, so it points you at the default agent |
 
 **Review** is the investigator's second job, and the one that is not a bug. An issue that already carries comments, proposed approaches and half-agreed fixes wants a second opinion on what is on the table, not a root cause — so the investigator reads the item and every comment through your tracker, checks each proposal against the code, and returns a `## Review`: verdict, `path:line` evidence, what the change would touch, and an explicit list of the claims it did **not** verify. A review never Blocks for want of a reproduction, one item goes to one specialist (six issues is six calls), and a Review is an opinion, never an authorisation — it cannot send the basher to work. Building what a review endorsed is a fix request, and starts over.
+
+**Revise** is the other direction: someone has reviewed *your* PR and you want the feedback acted on. That goes to the reviewer, not the investigator. It fixes the small, unambiguous threads with a commit each, puts a proposal on the rest for the author to decide, and replies on every thread once you have confirmed the push.
 
 Gates: the orchestrator stops and shows you the Diagnosis before any edit when confidence is not high, you only asked "why", or the fix touches auth / crypto / billing / migrations. It always asks before pushing. A specialist that is blocked or unreachable ends the pipeline with its Blocked block relayed; the orchestrator never does a specialist's work itself. The gates only exist on the main thread, so the orchestrator runs as the agent you selected and refuses to run as a subagent.
 
@@ -106,6 +111,7 @@ Agents carry a tier, not a model. The installer resolves the tier per platform, 
 | orchestrator | balanced | classifies and relays; small context, but the gates need judgement |
 | basher | balanced | a strong coder at a fraction of the top tier; the Diagnosis already did the thinking |
 | pr-writer | balanced | short pass; writing quality matters more than reasoning |
+| reviewer | balanced | small local edits the reviewer already specified; big ones go back to the author |
 | investigator | strong | root cause is where reasoning quality pays, and read-only tools keep its output small |
 
 Defaults shipped:
@@ -148,7 +154,7 @@ npx @scotscottmca/away-team --mcp jira,github   # plus these, for a server disco
 npx @scotscottmca/away-team --no-mcp            # none; isolation, not cost (~11 tokens a tool)
 ```
 
-Two servers are named by default whether or not they are discovered, since `dist/` is shared and cannot be discovered for. The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). The GitHub server, `github`, is named for the same reason a hosted or remote session gives the crew: `gh` is not installed there, so pr-writer and the read-only guard's issue-filing exception (see Design notes) need the MCP path instead.
+Two servers are named by default whether or not they are discovered, since `dist/` is shared and cannot be discovered for. The Azure DevOps server, [`@azure-devops/mcp`](https://github.com/microsoft/azure-devops-mcp), is named under both names its own guide registers it as: `ado` (the Copilot CLI and VS Code examples) and `azure-devops` (the `claude mcp add` example). The GitHub server, `github`, is named for the same reason a hosted or remote session gives the crew: `gh` is not installed there, so pr-writer, reviewer and the read-only guard's issue-filing exception (see Design notes) need the MCP path instead.
 
 **On Claude Code every allowlist that names a server also carries `ToolSearch`, and it is not optional.** Claude Code defers MCP tools in hosted and remote sessions: the schemas are not loaded, the tools are missing from the agent's live tool list, and a direct call fails until `ToolSearch` fetches them by name or keyword. Naming `mcp__github__*` therefore grants a server the agent can neither see nor reach, and an agent that reads its own tool list concludes the server is not configured — which is what happened: the orchestrator reported it had "no authenticated GitHub MCP" on a hosted session that had one, and stopped, because `gh` is not installed there and the skill render removes `WebFetch`. Three doors, all of them shut, and the server behind the middle one was open the whole time. `ToolSearch` rides along with the MCP entries it exists to load and is left out under `--no-mcp`; it grants nothing new, since loading a schema is not permission to call it and the allowlist still decides that. The crew's prose says the same thing in the place each agent needs it: an empty tool list is never evidence that a server is absent. There is no known Copilot equivalent, so that render does not carry it.
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "away-team",
-  "description": "Bug-fixing agent crew: orchestrator, mapper, investigator, basher, pr-writer.",
+  "description": "Bug-fixing agent crew: orchestrator, mapper, investigator, basher, pr-writer, reviewer.",
   "owner": { "name": "scotscottmca", "url": "https://github.com/scotscottmca" },
   "plugins": [
     {
