@@ -1,6 +1,7 @@
 # A push to main that changes shipped code is a release: bump patch (unless the version is already unpublished),
 # rebuild dist, tag, publish. Docs, workflow and licence changes do not release.
-# Auth: NPM_TOKEN repo secret (granular token, publish scope, bypass 2FA), or npm trusted publishing via OIDC if configured.
+# Auth: npm trusted publishing via OIDC (id-token: write below). No token secret; the trusted publisher is
+# configured on npmjs.com for this repo and publish.yml.
 name: publish
 on:
   push:
@@ -53,6 +54,6 @@ jobs:
       # Again, on the bumped tree: the first run validated the source, this one validates the exact
       # render that is about to be published.
       - run: npm test
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.5.1
       - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
