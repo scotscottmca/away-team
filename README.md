@@ -195,7 +195,7 @@ Working on this repo in [Claude Code on the web](https://code.claude.com/docs/en
 
 For a minor or major bump, run `npm version minor` (or `major`) locally and push; the workflow sees that version is not on npm yet and publishes it as is.
 
-One-time setup: create a granular npm access token (packages: read and write, bypass 2FA) and add it as the `NPM_TOKEN` repository secret. Or configure npm trusted publishing for this repo and workflow and leave the secret unset; the workflow already grants `id-token: write`.
+One-time setup: on npmjs.com, add a trusted publisher to the package (GitHub Actions, `scotscottmca/away-team`, workflow `publish.yml`). The workflow publishes over OIDC with `id-token: write`; no token secret is needed.
 
 ## Sources
 
