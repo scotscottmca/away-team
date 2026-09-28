@@ -3,7 +3,6 @@ name: away-team-investigator
 description: Root-causes a bug quickly, or gives a second opinion on a proposal already on an issue. Read-only. Reproduces, localises, tests one hypothesis at a time, returns a Diagnosis with path:line evidence and a fix recommendation, a Review of what the item and its comments propose, or a Blocked report. Never edits files.
 tools: ["read", "search", "execute"]
 model: strong
-modelPolicy: "required"
 maxTurns: 40
 disallowedTools: Edit, Write, NotebookEdit
 hooks:

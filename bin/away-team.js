@@ -14,9 +14,15 @@ const { spawnSync } = require('node:child_process');
 const ROOT = path.join(__dirname, '..');
 const pkg = require('../package.json');
 const MODELS = require('./models.js');
-// First row in the tier's priority list that names this platform; a row missing a platform's key is skipped for
-// that platform only, so a plan-only model can be prepended (see models.js) without breaking the other platform.
-const resolveModel = (rows, platform) => rows.find((e) => e[platform])?.[platform];
+// The tier's priority list for this platform; a row missing a platform's key is skipped for that platform only, so
+// a plan-only model can be prepended (see models.js) without breaking the other platform. Claude Code frontmatter
+// takes one model, so it gets the first; Copilot takes a list and falls through it at runtime when a model is not
+// on the plan, so it gets them all. Undefined when no row names the platform.
+const resolveModel = (rows, platform) => {
+  const ids = rows.map((e) => e[platform]).filter(Boolean);
+  if (!ids.length) return undefined;
+  return platform === 'claude' || ids.length === 1 ? ids[0] : `[${ids.join(', ')}]`;
+};
 // Frontmatter keys only Claude Code understands; dropped from the Copilot render, with any indented block under them.
 const CLAUDE_ONLY = ['maxTurns', 'disallowedTools', 'permissionMode', 'skills', 'hooks'];
 // Frontmatter keys only Copilot understands; dropped from the Claude render.

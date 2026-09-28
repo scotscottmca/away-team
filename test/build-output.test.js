@@ -210,7 +210,9 @@ test('every model is a real model for its platform', () => {
   for (const a of all) {
     const m = frontmatter(a.text).match(/^model: (.*)$/m);
     assert.ok(m, `${a.platform}/${a.name}: no model`);
-    assert.ok(MODELS[a.platform].includes(m[1]), `${a.platform}/${a.name}: model "${m[1]}" is not in the ${a.platform} tier table`);
+    for (const id of m[1].replace(/^\[|\]$/g, '').split(', ')) {
+      assert.ok(MODELS[a.platform].includes(id), `${a.platform}/${a.name}: model "${id}" is not in the ${a.platform} tier table`);
+    }
   }
 });
 
@@ -255,18 +257,10 @@ test('the Claude render carries no Copilot-only key and no bare placeholder', ()
   }
 });
 
-test('only the investigator declares modelPolicy: "required", and only on Copilot', () => {
-  // issue 16: a declared model the plan cannot honour falls back to the session's model silently unless the agent
-  // sets modelPolicy: "required", which refuses dispatch instead. Only the investigator's reasoning tier is
-  // load-bearing enough to ask for that.
-  for (const a of agentFiles('copilot')) {
-    const fm = frontmatter(a.text);
-    if (a.name === 'away-team-investigator') {
-      assert.match(fm, /^modelPolicy: "required"$/m, `copilot/${a.name}: missing modelPolicy: "required"`);
-    } else {
-      assert.ok(!/^modelPolicy:/m.test(fm), `copilot/${a.name}: unexpected modelPolicy key`);
-    }
-  }
+test('no agent declares modelPolicy: "required"', () => {
+  // required refuses dispatch when the declared model is unavailable, which defeats the investigator's
+  // Opus 5.5 -> Opus 5 -> Sonnet 5 fallback list in bin/models.js.
+  for (const a of agentFiles('copilot')) assert.ok(!/^modelPolicy:/m.test(frontmatter(a.text)), `copilot/${a.name}: unexpected modelPolicy key`);
 });
 
 test('each specialist has exactly one report block and exactly one Blocked block', () => {
@@ -562,7 +556,7 @@ test('the build rejects bad input instead of rendering it', () => {
     ['unknown tool alias', breakAgent(INV, TOOLS, '"read", "telepathy", "execute"'), /unknown tool alias "telepathy"/],
     ['malformed tools entry', breakAgent(INV, TOOLS, '"read(", "execute"'), /bad tools entry "read\("/],
     // issue 17: a tier whose rows have no alias for a platform must fail the build loudly, not render "model: undefined".
-    ['model tier missing a platform alias', breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5' }]", "strong: [{ claude: 'opus' }]"),
+    ['model tier missing a platform alias', breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5.5' }, { copilot: 'claude-opus-5' }, { copilot: 'claude-sonnet-5' }]", "strong: [{ claude: 'opus' }]"),
       /model tier "strong" has no copilot alias/],
   ]) {
     const { code, output } = buildCopy(mutate);
@@ -571,19 +565,21 @@ test('the build rejects bad input instead of rendering it', () => {
   }
 });
 
-test('models.js is an ordered priority list: the first row aliased for a platform wins, others fall through', () => {
+test('models.js is an ordered priority list: Claude gets the first row, Copilot the whole list as its fallback', () => {
   // issue 17: prepending a row (a plan-only model like `fable`) must change the rendered model without touching
   // the winning row, and a row missing one platform's key must be skipped for that platform only.
   const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'away-team-models-'));
   for (const d of ['bin', 'agents', 'skills', 'hooks']) fs.cpSync(path.join(ROOT, d), path.join(tmp, d), { recursive: true });
   fs.cpSync(path.join(ROOT, 'package.json'), path.join(tmp, 'package.json'));
-  breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5' }]",
-    "strong: [{ claude: 'fable' }, { claude: 'opus', copilot: 'claude-opus-5' }]")(tmp);
+  breakModels("strong: [{ claude: 'opus', copilot: 'claude-opus-5.5' }, { copilot: 'claude-opus-5' }, { copilot: 'claude-sonnet-5' }]",
+    "strong: [{ claude: 'fable' }, { claude: 'opus', copilot: 'claude-opus-5.5' }]")(tmp);
   execFileSync('node', [path.join(tmp, 'bin', 'away-team.js'), '--build'], { cwd: tmp, stdio: 'pipe' });
   const claudeAgent = fs.readFileSync(path.join(tmp, 'dist', 'claude', 'agents', 'away-team-investigator.md'), 'utf8');
   assert.match(claudeAgent, /^model: fable$/m, 'the prepended row did not win priority on Claude');
   const copilotAgent = fs.readFileSync(path.join(tmp, 'dist', 'copilot', 'agents', 'away-team-investigator.agent.md'), 'utf8');
-  assert.match(copilotAgent, /^model: claude-opus-5$/m, 'a row with no copilot key was not skipped for copilot only');
+  assert.match(copilotAgent, /^model: claude-opus-5\.5$/m, 'a row with no copilot key was not skipped for copilot only');
+  const shipped = fs.readFileSync(path.join(ROOT, 'dist', 'copilot', 'agents', 'away-team-investigator.agent.md'), 'utf8');
+  assert.match(shipped, /^model: \[claude-opus-5\.5, claude-opus-5, claude-sonnet-5\]$/m, 'a multi-row tier did not render as a Copilot fallback list');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
