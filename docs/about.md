@@ -49,7 +49,7 @@ Agents declare a tier, not a model, so the same file runs on whatever each platf
 |---|---|---|---|
 | cheap | mapper | GPT-5.6 Luna | haiku |
 | balanced | orchestrator, basher, pr-writer, reviewer | Claude Sonnet 5 | sonnet |
-| strong | investigator | Claude Opus 5 | opus |
+| strong | investigator | Claude Opus 5.5, then Opus 5, then Sonnet 5 | opus |
 
 The mapping is an ordered priority list per tier in `bin/models.js`: the first row that names the platform wins, so a plan-only model is added by prepending a row rather than overwriting the default. Claude's aliases resolve to the newest model of each tier on their own; the Copilot column is the cheapest model on the per-token price list that does the job.
 
