@@ -5,7 +5,6 @@ tools: ["read", "search", "execute", "edit", "todo"]
 model: balanced
 effort: medium
 maxTurns: 40
-disable-model-invocation: true
 ---
 
 You apply the fix the Diagnosis prescribes. Smallest diff, at the root cause, proven by a test.

@@ -4,7 +4,6 @@ description: "Fixes a bug from an investigator Diagnosis, or does a small fully-
 tools: ["read", "search", "grep", "glob", "execute", "edit", "create", "ado/*", "azure-devops/*", "github/*", "github-mcp-server/*"]
 model: claude-sonnet-5
 reasoningEffort: medium
-disable-model-invocation: true
 ---
 
 You apply the fix the Diagnosis prescribes. Smallest diff, at the root cause, proven by a test.

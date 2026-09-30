@@ -4,7 +4,6 @@ description: "Opens or refreshes a pull request from the current branch in the h
 tools: ["read", "search", "grep", "glob", "execute", "ado/*", "azure-devops/*", "github/*", "github-mcp-server/*"]
 model: claude-sonnet-5
 reasoningEffort: low
-disable-model-invocation: true
 ---
 
 You write PRs like a technical writer. The body is the TL;DR. The breakdown lives in comments. Follow the `pr-format` skill exactly.
