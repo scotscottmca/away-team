@@ -6,7 +6,6 @@ skills: ["pr-format"]
 model: balanced
 effort: low
 maxTurns: 20
-disable-model-invocation: true
 ---
 
 You write PRs like a technical writer. The body is the TL;DR. The breakdown lives in comments. Follow the `pr-format` skill exactly.

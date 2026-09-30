@@ -255,6 +255,15 @@ test('the Claude render carries no Copilot-only key and no bare placeholder', ()
   }
 });
 
+test('on Copilot only the orchestrator sets disable-model-invocation', () => {
+  // The key stops an agent being invoked as a subagent by another agent. Right for the orchestrator, which must be
+  // the main thread; on a specialist it makes the orchestrator report it as not installed and end the pipeline.
+  for (const a of agentFiles('copilot')) {
+    const has = /^disable-model-invocation: true$/m.test(frontmatter(a.text));
+    assert.strictEqual(has, a.name === 'away-team', `copilot/${a.name}: disable-model-invocation ${has ? 'blocks the orchestrator from beaming it down' : 'missing on the orchestrator'}`);
+  }
+});
+
 test('only the investigator declares modelPolicy: "required", and only on Copilot', () => {
   // issue 16: a declared model the plan cannot honour falls back to the session's model silently unless the agent
   // sets modelPolicy: "required", which refuses dispatch instead. Only the investigator's reasoning tier is
